@@ -7,7 +7,24 @@ const reminderRoutes = require("./routes/reminderRoutes");
 
 const app = express();
 
-app.use(cors({ origin: "https://amazon-reminder.vercel.app/" }));
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://amazon-reminder.vercel.app",
+  ...(process.env.CLIENT_URL ? process.env.CLIENT_URL.split(",") : []),
+].map((origin) => origin.trim().replace(/\/$/, ""));
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin) return callback(null, true);
+      const normalizedOrigin = origin.replace(/\/$/, "");
+      if (allowedOrigins.includes(normalizedOrigin)) {
+        return callback(null, true);
+      }
+      return callback(new Error(`CORS blocked for origin: ${origin}`));
+    },
+  }),
+);
 app.use(express.json());
 
 // Routes
