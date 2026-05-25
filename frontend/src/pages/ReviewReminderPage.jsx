@@ -12,7 +12,6 @@ export default function ReviewReminderPage() {
     reviewDate: '',
     amazonLink: '',
     productImage: '',
-    notes: '',
   });
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
@@ -47,7 +46,7 @@ export default function ReviewReminderPage() {
       await api.post('/reminders/review', form);
       setSuccess('Review reminder created.');
       refresh();
-      setForm({ orderId: '', orderDate: '', reviewDate: '', amazonLink: '', productImage: '', notes: '' });
+      setForm({ orderId: '', orderDate: '', reviewDate: '', amazonLink: '', productImage: '' });
       setTimeout(() => navigate('/'), 1500);
     } catch (err) {
       setErrors({ general: err.response?.data?.message || 'Failed to create reminder' });
@@ -161,18 +160,6 @@ export default function ReviewReminderPage() {
             onChange={handleChange}
             placeholder="Optional if Amazon image is not detected"
             className="input-field"
-          />
-        </div>
-
-        <div>
-          <label className="label">Notes</label>
-          <textarea
-            name="notes"
-            value={form.notes}
-            onChange={handleChange}
-            rows={3}
-            placeholder="Any review details..."
-            className="input-field resize-none"
           />
         </div>
 

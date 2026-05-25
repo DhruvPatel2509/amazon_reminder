@@ -6,6 +6,7 @@ const typeConfig = {
   review: {
     title: 'Review Reminder',
     dateLabel: 'Review Date',
+    taskLabel: 'Review karna hai',
     color: 'text-orange-200',
     border: 'border-orange-500/30',
     bg: 'bg-orange-500/10',
@@ -13,6 +14,7 @@ const typeConfig = {
   refundForm: {
     title: 'Refund Form Reminder',
     dateLabel: 'Form Date',
+    taskLabel: 'Refund form fill karna hai',
     color: 'text-cyan-200',
     border: 'border-cyan-500/30',
     bg: 'bg-cyan-500/10',
@@ -20,6 +22,7 @@ const typeConfig = {
   refund: {
     title: 'Refund Reminder',
     dateLabel: 'Refund Date',
+    taskLabel: 'Refund check karna hai',
     color: 'text-blue-200',
     border: 'border-blue-500/30',
     bg: 'bg-blue-500/10',
@@ -33,6 +36,77 @@ function formatDate(date) {
 
 function getTargetDate(reminder) {
   return reminder.type === 'review' ? reminder.reviewDate : reminder.refundDate;
+}
+
+function isToday(date) {
+  if (!date) return false;
+  const target = new Date(date);
+  const today = new Date();
+  return (
+    target.getDate() === today.getDate()
+    && target.getMonth() === today.getMonth()
+    && target.getFullYear() === today.getFullYear()
+  );
+}
+
+function formatAmount(amount) {
+  if (amount === null || amount === undefined || amount === '') return '';
+  return `Rs. ${Number(amount).toFixed(2)}`;
+}
+
+function whatsappLink(reminder) {
+  const rawNumber = String(reminder.contactPerson || '').replace(/\D/g, '');
+  const number = rawNumber.length === 10 ? `91${rawNumber}` : rawNumber;
+  if (number.length < 11) return '';
+  const amount = formatAmount(reminder.refundAmount);
+  const message = [
+    'Refund Inquiry',
+    '',
+    'Hello,',
+    '',
+    'Mera refund abhi tak credit nahi hua hai. Please status check karein:',
+    '',
+    `Order ID: #${reminder.orderId}`,
+    '',
+    `Amount: ${amount || 'Not filled'}`,
+    '',
+    `Expected Date: ${formatDate(reminder.refundDate)}`,
+    '',
+    'Thank you!',
+  ].join('\n');
+  return `https://wa.me/${number}?text=${encodeURIComponent(message)}`;
+}
+
+function TodayTaskItem({ reminder }) {
+  const config = typeConfig[reminder.type] || typeConfig.review;
+  const messageLink = reminder.type === 'refund' ? whatsappLink(reminder) : '';
+
+  return (
+    <div className={`flex flex-col gap-3 rounded-lg border ${config.border} ${config.bg} p-4 sm:flex-row sm:items-center sm:justify-between`}>
+      <div>
+        <p className={`text-sm font-display font-semibold ${config.color}`}>{config.taskLabel}</p>
+        <p className="mt-1 break-all text-sm text-white">Order #{reminder.orderId}</p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Link
+          to={`/edit/${reminder._id}`}
+          className="w-fit rounded-md border border-border bg-card px-3 py-2 text-xs font-display font-semibold text-gray-100 hover:border-accent/50"
+        >
+          Open Task
+        </Link>
+        {messageLink && (
+          <a
+            href={messageLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-fit rounded-md border border-green-700/60 bg-green-900/20 px-3 py-2 text-xs font-display font-semibold text-green-300 hover:bg-green-900/40 hover:text-white"
+          >
+            Send Message
+          </a>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function ReminderListItem({ reminder }) {
@@ -115,6 +189,11 @@ export default function AllRemindersPage() {
     fetchReminders();
   }, [fetchReminders]);
 
+  const todayTasks = useMemo(
+    () => reminders.filter((reminder) => reminder.status !== 'completed' && isToday(getTargetDate(reminder))),
+    [reminders]
+  );
+
   const grouped = useMemo(() => {
     return ['review', 'refundForm', 'refund'].map((type) => {
       const allItems = reminders.filter((reminder) => reminder.type === type);
@@ -152,6 +231,32 @@ export default function AllRemindersPage() {
           <option value="completed">Completed</option>
         </select>
       </div>
+
+      {!loading && (
+        <section className="card mb-6 border-orange-500/30">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="font-display text-xl font-bold text-white">Today's Work</h2>
+              <p className="mt-1 text-sm text-gray-300">{formatDate(new Date())} ko due pending tasks.</p>
+            </div>
+            <span className="rounded-full border border-orange-500/30 bg-orange-500/10 px-3 py-1 text-sm font-display font-semibold text-orange-200">
+              {todayTasks.length} Task{todayTasks.length === 1 ? '' : 's'}
+            </span>
+          </div>
+
+          {todayTasks.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-border bg-surface/40 p-4 text-sm text-gray-300">
+              Aaj review, refund form ya refund ka koi pending kaam nahi hai.
+            </div>
+          ) : (
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {todayTasks.map((reminder) => (
+                <TodayTaskItem key={reminder._id} reminder={reminder} />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       {loading ? (
         <div className="flex items-center justify-center py-20">

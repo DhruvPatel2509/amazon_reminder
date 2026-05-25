@@ -14,6 +14,9 @@ export default function RefundReminderPage() {
     reviewDate: '',
     refundDate: '',
     contactPerson: '',
+    originalAmount: '',
+    less: '',
+    refundAmount: '',
     notes: '',
   });
   const [errors, setErrors] = useState({});
@@ -30,7 +33,15 @@ export default function RefundReminderPage() {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+    setForm((prev) => {
+      const updated = { ...prev, [name]: value };
+      if (name === 'originalAmount' || name === 'less') {
+        const original = Number(updated.originalAmount);
+        const deduction = Number(updated.less || 0);
+        updated.refundAmount = updated.originalAmount === '' ? '' : (original - deduction).toFixed(2);
+      }
+      return updated;
+    });
     if (errors[name]) setErrors((prev) => ({ ...prev, [name]: '' }));
   };
 
@@ -137,11 +148,30 @@ export default function RefundReminderPage() {
           {errors.refundDate && <p className="text-danger text-xs mt-1">{errors.refundDate}</p>}
         </div>
 
-        {/* Contact Person */}
+        {/* WhatsApp Number */}
         <div>
-          <label className="label">Contact Person</label>
-          <input type="text" name="contactPerson" value={form.contactPerson} onChange={handleChange}
-            placeholder="e.g. Amazon Customer Care" className="input-field" />
+          <label className="label">WhatsApp Number</label>
+          <input type="tel" name="contactPerson" value={form.contactPerson} onChange={handleChange}
+            placeholder="e.g. 919876543210" className="input-field" />
+          <p className="mt-1 text-xs text-gray-400">Country code ke saath number enter karein.</p>
+        </div>
+
+        <div>
+          <label className="label">Original Amount</label>
+          <input type="number" name="originalAmount" value={form.originalAmount} onChange={handleChange}
+            min="0" step="0.01" placeholder="0.00" className="input-field" />
+        </div>
+
+        <div>
+          <label className="label">Less</label>
+          <input type="number" name="less" value={form.less} onChange={handleChange}
+            min="0" step="0.01" placeholder="0.00" className="input-field" />
+        </div>
+
+        <div>
+          <label className="label">Refund Amount</label>
+          <input type="number" name="refundAmount" value={form.refundAmount}
+            placeholder="Calculated automatically" className="input-field" readOnly />
         </div>
 
         {/* Notes */}

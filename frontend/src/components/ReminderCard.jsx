@@ -62,9 +62,49 @@ function dueText(reminder) {
   return `${days} days left`;
 }
 
+function formatAmount(amount) {
+  if (amount === null || amount === undefined || amount === '') return 'Not filled';
+  return `Rs. ${Number(amount).toFixed(2)}`;
+}
+
+function whatsappNumber(number) {
+  const digits = String(number || '').replace(/\D/g, '');
+  if (digits.length === 10) return `91${digits}`;
+  return digits.length >= 11 ? digits : '';
+}
+
+function whatsappLink(reminder) {
+  const number = whatsappNumber(reminder.contactPerson);
+  if (!number) return '';
+  const amount = formatAmount(reminder.refundAmount);
+  const message = [
+    'Refund Inquiry',
+    '',
+    'Hello,',
+    '',
+    'Mera refund abhi tak credit nahi hua hai. Please status check karein:',
+    '',
+    `Order ID: #${reminder.orderId}`,
+    '',
+    `Amount: ${amount}`,
+    '',
+    `Expected Date: ${formatDate(reminder.refundDate)}`,
+    '',
+    'Thank you!',
+  ].join('\n');
+  return `https://wa.me/${number}?text=${encodeURIComponent(message)}`;
+}
+
 function ReminderRow({ reminder, onDelete, onStatusChange }) {
   const type = typeConfig[reminder.type] || typeConfig.review;
   const status = statusConfig[reminder.status] || statusConfig.upcoming;
+  const refundDaysRemaining = reminder.type === 'refund' ? daysRemaining(reminder.refundDate) : null;
+  const canSendRefundMessage =
+    reminder.type === 'refund'
+    && reminder.status !== 'completed'
+    && refundDaysRemaining !== null
+    && refundDaysRemaining <= 0
+    && whatsappLink(reminder);
 
   const handleDelete = async () => {
     if (!window.confirm(`Delete ${type.label} for Order #${reminder.orderId}?`)) return;
@@ -101,12 +141,18 @@ function ReminderRow({ reminder, onDelete, onStatusChange }) {
               <p className="label mb-1">{type.dateLabel}</p>
               <p className="text-gray-100">{formatDate(targetDate(reminder))}</p>
             </div>
-            <div>
-              <p className="label mb-1">Contact</p>
+            {reminder.type === 'refund' && <div>
+              <p className="label mb-1">WhatsApp</p>
               <p className="text-gray-100">{reminder.contactPerson || 'Not filled'}</p>
-            </div>
+            </div>}
+            {reminder.type === 'refund' && (
+              <div>
+                <p className="label mb-1">Refund amount</p>
+                <p className="text-gray-100">{formatAmount(reminder.refundAmount)}</p>
+              </div>
+            )}
           </div>
-          {reminder.notes && <p className="mt-3 text-sm text-gray-300 break-words">{reminder.notes}</p>}
+          {reminder.type !== 'review' && reminder.notes && <p className="mt-3 text-sm text-gray-300 break-words">{reminder.notes}</p>}
         </div>
 
         <div className="flex flex-col items-end gap-2">
@@ -130,6 +176,16 @@ function ReminderRow({ reminder, onDelete, onStatusChange }) {
             Complete
           </button>
         )}
+        {canSendRefundMessage && (
+          <a
+            href={canSendRefundMessage}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-lg border border-green-700/60 bg-green-900/20 px-3 py-2 text-xs font-display font-medium text-green-300 hover:bg-green-900/40 hover:text-white"
+          >
+            Send Message
+          </a>
+        )}
         <button
           onClick={handleDelete}
           className="rounded-lg border border-border px-3 py-2 text-xs font-display font-medium text-gray-300 hover:border-red-800/50 hover:bg-red-900/20 hover:text-red-300"
@@ -149,7 +205,7 @@ export default function ReminderCard({ orderGroup, onDelete, onStatusChange }) {
 
   return (
     <div className="card overflow-hidden">
-      <div className="grid gap-5 lg:grid-cols-[180px_1fr]">
+      <div className="grid gap-5 2xl:grid-cols-[160px_1fr]">
         <div className="space-y-3">
           <div className="mx-auto aspect-square w-full max-w-[220px] overflow-hidden rounded-lg border border-border bg-surface flex items-center justify-center lg:max-w-none">
             {image ? (

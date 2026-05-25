@@ -34,6 +34,11 @@ function typeLabel(type) {
   return 'Refund';
 }
 
+function calculateRefundAmount(originalAmount, less) {
+  if (originalAmount === undefined || originalAmount === null || originalAmount === '') return null;
+  return Number(originalAmount) - Number(less || 0);
+}
+
 // Helper: compute status
 function computeStatus(targetDate, currentStatus) {
   if (currentStatus === 'completed') return 'completed';
@@ -166,7 +171,7 @@ exports.getNotifications = async (req, res) => {
 // POST create review reminder
 exports.createReviewReminder = async (req, res) => {
   try {
-    const { orderId, orderDate, reviewDate, amazonLink, productImage, notes } = req.body;
+    const { orderId, orderDate, reviewDate, amazonLink, productImage } = req.body;
 
     if (!orderId || !orderDate || !reviewDate) {
       return res.status(400).json({ success: false, message: 'All fields are required' });
@@ -178,7 +183,6 @@ exports.createReviewReminder = async (req, res) => {
       reviewDate,
       amazonLink,
       productImage: productImage || (await getProductImage(amazonLink)),
-      notes,
       type: 'review',
     });
     await reviewReminder.save();
@@ -196,7 +200,7 @@ exports.createReviewReminder = async (req, res) => {
 // POST create refund form reminder
 exports.createRefundFormReminder = async (req, res) => {
   try {
-    const { orderId, orderDate, amazonLink, refundDate, contactPerson, notes, productImage } = req.body;
+    const { orderId, orderDate, amazonLink, refundDate, notes, productImage } = req.body;
 
     if (!orderId || !orderDate || !refundDate) {
       return res.status(400).json({
@@ -211,7 +215,6 @@ exports.createRefundFormReminder = async (req, res) => {
       amazonLink,
       productImage: productImage || (await getProductImage(amazonLink)),
       refundDate,
-      contactPerson,
       notes,
       type: 'refundForm',
     });
@@ -226,7 +229,7 @@ exports.createRefundFormReminder = async (req, res) => {
 // POST create refund reminder
 exports.createRefundReminder = async (req, res) => {
   try {
-    const { orderId, orderDate, amazonLink, reviewDate, refundDate, contactPerson, notes, productImage } = req.body;
+    const { orderId, orderDate, amazonLink, reviewDate, refundDate, contactPerson, originalAmount, less, notes, productImage } = req.body;
 
     if (!orderId || !orderDate || !refundDate) {
       return res.status(400).json({ success: false, message: 'Order ID, Order Date and Refund Date are required' });
@@ -240,6 +243,9 @@ exports.createRefundReminder = async (req, res) => {
       reviewDate,
       refundDate,
       contactPerson,
+      originalAmount: originalAmount === '' ? null : originalAmount,
+      less: less === '' ? null : less,
+      refundAmount: calculateRefundAmount(originalAmount, less),
       notes,
       type: 'refund',
     });
@@ -257,10 +263,20 @@ exports.updateReminder = async (req, res) => {
     const reminder = await Reminder.findById(req.params.id);
     if (!reminder) return res.status(404).json({ success: false, message: 'Reminder not found' });
 
-    const fields = ['orderId', 'orderDate', 'amazonLink', 'productImage', 'reviewDate', 'refundDate', 'contactPerson', 'status', 'notes'];
+    const fields = ['orderId', 'orderDate', 'amazonLink', 'productImage', 'reviewDate', 'refundDate', 'contactPerson', 'originalAmount', 'less', 'status', 'notes'];
     fields.forEach((f) => {
       if (req.body[f] !== undefined) reminder[f] = req.body[f];
     });
+    if (reminder.type === 'review') reminder.notes = '';
+    if (reminder.type === 'refundForm') {
+      reminder.contactPerson = '';
+      reminder.originalAmount = null;
+      reminder.less = null;
+      reminder.refundAmount = null;
+    }
+    if (reminder.type === 'refund') {
+      reminder.refundAmount = calculateRefundAmount(reminder.originalAmount, reminder.less);
+    }
     if (req.body.amazonLink && !req.body.productImage) {
       reminder.productImage = await getProductImage(req.body.amazonLink);
     }

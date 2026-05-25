@@ -34,6 +34,20 @@ const reminderSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+    originalAmount: {
+      type: Number,
+      default: null,
+      min: 0,
+    },
+    less: {
+      type: Number,
+      default: null,
+      min: 0,
+    },
+    refundAmount: {
+      type: Number,
+      default: null,
+    },
     type: {
       type: String,
       enum: ['review', 'refundForm', 'refund'],

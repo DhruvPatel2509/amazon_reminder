@@ -14,6 +14,11 @@ function reminderTitle(type) {
   return 'Refund';
 }
 
+function calculateRefundAmount(originalAmount, less) {
+  if (originalAmount === '') return '';
+  return (Number(originalAmount) - Number(less || 0)).toFixed(2);
+}
+
 export default function EditReminderPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -39,6 +44,9 @@ export default function EditReminderPage() {
           reviewDate: formatDateInput(r.reviewDate),
           refundDate: formatDateInput(r.refundDate),
           contactPerson: r.contactPerson || '',
+          originalAmount: r.originalAmount ?? '',
+          less: r.less ?? '',
+          refundAmount: r.refundAmount ?? '',
           status: r.status || 'upcoming',
           notes: r.notes || '',
         });
@@ -49,7 +57,13 @@ export default function EditReminderPage() {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+    setForm((prev) => {
+      const updated = { ...prev, [name]: value };
+      if (name === 'originalAmount' || name === 'less') {
+        updated.refundAmount = calculateRefundAmount(updated.originalAmount, updated.less);
+      }
+      return updated;
+    });
     if (errors[name]) setErrors((prev) => ({ ...prev, [name]: '' }));
   };
 
@@ -67,7 +81,10 @@ export default function EditReminderPage() {
 
     setSaving(true);
     try {
-      await api.put(`/reminders/${id}`, form);
+      const payload = { ...form };
+      if (reminder.type === 'review') payload.notes = '';
+      if (reminder.type === 'refundForm') payload.contactPerson = '';
+      await api.put(`/reminders/${id}`, payload);
       setSuccess(true);
       refresh();
       setTimeout(() => navigate('/'), 1500);
@@ -170,11 +187,31 @@ export default function EditReminderPage() {
               <input type="date" name="refundDate" value={form.refundDate} onChange={handleChange}
                 className="input-field" />
             </div>
-            <div>
-              <label className="label">Contact Person</label>
-              <input type="text" name="contactPerson" value={form.contactPerson} onChange={handleChange}
-                placeholder="e.g. Amazon Support" className="input-field" />
-            </div>
+            {reminder.type === 'refund' && <div>
+              <label className="label">WhatsApp Number</label>
+              <input type="tel" name="contactPerson" value={form.contactPerson} onChange={handleChange}
+                placeholder="e.g. 919876543210" className="input-field" />
+              <p className="mt-1 text-xs text-gray-400">Country code ke saath number enter karein.</p>
+            </div>}
+            {reminder.type === 'refund' && (
+              <>
+                <div>
+                  <label className="label">Original Amount</label>
+                  <input type="number" name="originalAmount" value={form.originalAmount} onChange={handleChange}
+                    min="0" step="0.01" placeholder="0.00" className="input-field" />
+                </div>
+                <div>
+                  <label className="label">Less</label>
+                  <input type="number" name="less" value={form.less} onChange={handleChange}
+                    min="0" step="0.01" placeholder="0.00" className="input-field" />
+                </div>
+                <div>
+                  <label className="label">Refund Amount</label>
+                  <input type="number" name="refundAmount" value={form.refundAmount}
+                    placeholder="Calculated automatically" className="input-field" readOnly />
+                </div>
+              </>
+            )}
           </>
         )}
 
@@ -189,11 +226,11 @@ export default function EditReminderPage() {
         </div>
 
         {/* Notes */}
-        <div>
+        {reminder.type !== 'review' && <div>
           <label className="label">Notes</label>
           <textarea name="notes" value={form.notes} onChange={handleChange} rows={3}
             className="input-field resize-none" placeholder="Any additional notes..." />
-        </div>
+        </div>}
 
         <div className="flex gap-3 pt-2">
           <button type="submit" disabled={saving}

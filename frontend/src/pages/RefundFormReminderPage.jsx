@@ -12,7 +12,6 @@ export default function RefundFormReminderPage() {
     amazonLink: '',
     productImage: '',
     refundDate: '',
-    contactPerson: '',
     notes: '',
   });
   const [errors, setErrors] = useState({});
@@ -124,12 +123,6 @@ export default function RefundFormReminderPage() {
           <input type="date" name="refundDate" value={form.refundDate} onChange={handleChange}
             className={`input-field ${errors.refundDate ? 'border-danger' : ''}`} />
           {errors.refundDate && <p className="text-danger text-xs mt-1">{errors.refundDate}</p>}
-        </div>
-
-        <div>
-          <label className="label">Contact Person</label>
-          <input type="text" name="contactPerson" value={form.contactPerson} onChange={handleChange}
-            placeholder="e.g. Amazon Support" className="input-field" />
         </div>
 
         <div>
