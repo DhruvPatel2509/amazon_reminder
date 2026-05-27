@@ -4,6 +4,7 @@ const cors = require("cors");
 require("dotenv").config();
 
 const reminderRoutes = require("./routes/reminderRoutes");
+const orderRoutes = require("./routes/orderRoutes");
 
 const app = express();
 
@@ -29,6 +30,7 @@ app.use(express.json());
 
 // Routes
 app.use("/api/reminders", reminderRoutes);
+app.use("/api/orders", orderRoutes);
 
 // Health check
 app.get("/api/health", (req, res) =>

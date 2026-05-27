@@ -1,25 +1,25 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
 const reminderSchema = new mongoose.Schema(
   {
     orderId: {
       type: String,
-      required: [true, 'Order ID is required'],
+      required: [true, "Order ID is required"],
       trim: true,
     },
     orderDate: {
       type: Date,
-      required: [true, 'Order date is required'],
+      required: [true, "Order date is required"],
     },
     amazonLink: {
       type: String,
       trim: true,
-      default: '',
+      default: "",
     },
     productImage: {
       type: String,
       trim: true,
-      default: '',
+      default: "",
     },
     reviewDate: {
       type: Date,
@@ -32,7 +32,7 @@ const reminderSchema = new mongoose.Schema(
     contactPerson: {
       type: String,
       trim: true,
-      default: '',
+      default: "",
     },
     originalAmount: {
       type: Number,
@@ -48,43 +48,48 @@ const reminderSchema = new mongoose.Schema(
       type: Number,
       default: null,
     },
+    orderGroup: {
+      type: String,
+      trim: true,
+      default: "",
+    },
     type: {
       type: String,
-      enum: ['review', 'refundForm', 'refund'],
+      enum: ["review", "refundForm", "refund"],
       required: true,
     },
     status: {
       type: String,
-      enum: ['upcoming', 'completed', 'overdue'],
-      default: 'upcoming',
+      enum: ["upcoming", "completed", "overdue"],
+      default: "upcoming",
     },
     notes: {
       type: String,
-      default: '',
+      default: "",
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 // Auto-compute status before save
-reminderSchema.pre('save', function (next) {
+reminderSchema.pre("save", function (next) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const targetDate = this.type === 'review' ? this.reviewDate : this.refundDate;
+  const targetDate = this.type === "review" ? this.reviewDate : this.refundDate;
 
   if (!targetDate) return next();
 
   const target = new Date(targetDate);
   target.setHours(0, 0, 0, 0);
 
-  if (this.status !== 'completed') {
+  if (this.status !== "completed") {
     if (target < today) {
-      this.status = 'overdue';
+      this.status = "overdue";
     } else {
-      this.status = 'upcoming';
+      this.status = "upcoming";
     }
   }
   next();
 });
 
-module.exports = mongoose.model('Reminder', reminderSchema);
+module.exports = mongoose.model("Reminder", reminderSchema);
