@@ -57,6 +57,7 @@ export default function OrderStatsPage() {
   const [sortBy, setSortBy] = useState("refundDate");
   const [sortOrder, setSortOrder] = useState("asc");
   const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState(null);
 
   const fetchOrders = async () => {
     try {
@@ -95,7 +96,11 @@ export default function OrderStatsPage() {
 
     setLoading(true);
     try {
-      await api.post("/orders", form);
+      if (editingId) {
+        await api.put(`/orders/${editingId}`, form);
+      } else {
+        await api.post("/orders", form);
+      }
       setSuccess(true);
       setForm({
         orderId: "",
@@ -110,6 +115,7 @@ export default function OrderStatsPage() {
       });
       refresh();
       fetchOrders();
+      setEditingId(null);
       setTimeout(() => setSuccess(false), 2400);
     } catch (err) {
       setErrors({
@@ -117,6 +123,40 @@ export default function OrderStatsPage() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleEdit = (item) => {
+    setForm({
+      orderId: item.orderId || "",
+      orderDate: formatDateInput(item.orderDate),
+      amazonLink: item.amazonLink || "",
+      productImage: item.productImage || "",
+      refundDate: formatDateInput(item.refundDate),
+      originalAmount: item.originalAmount || "",
+      refundAmount: item.refundAmount || "",
+      orderGroup: item.orderGroup || "",
+      notes: item.notes || "",
+    });
+    setEditingId(item._id);
+    setShowForm(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleDelete = async (item) => {
+    // confirm before delete
+    // eslint-disable-next-line no-restricted-globals
+    if (!confirm(`Delete order ${item.orderId}? This cannot be undone.`))
+      return;
+    try {
+      await api.delete(`/orders/${item._id}`);
+      fetchOrders();
+      refresh();
+    } catch (err) {
+      console.error("Failed to delete order", err);
+      setErrors({
+        general: err.response?.data?.message || "Failed to delete order",
+      });
     }
   };
 
@@ -226,7 +266,24 @@ export default function OrderStatsPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={() => setShowForm(true)} className="btn-primary">
+          <button
+            onClick={() => {
+              setEditingId(null);
+              setForm({
+                orderId: "",
+                orderDate: "",
+                amazonLink: "",
+                productImage: "",
+                refundDate: "",
+                originalAmount: "",
+                refundAmount: "",
+                orderGroup: "",
+                notes: "",
+              });
+              setShowForm(true);
+            }}
+            className="btn-primary"
+          >
             Add New Order
           </button>
         </div>
@@ -260,7 +317,10 @@ export default function OrderStatsPage() {
                 </div>
                 <div>
                   <button
-                    onClick={() => setShowForm(false)}
+                    onClick={() => {
+                      setShowForm(false);
+                      setEditingId(null);
+                    }}
                     className="btn-secondary"
                   >
                     Close
@@ -406,6 +466,8 @@ export default function OrderStatsPage() {
                         <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                         Saving...
                       </>
+                    ) : editingId ? (
+                      "Save Changes"
                     ) : (
                       "Save Order"
                     )}
@@ -414,6 +476,7 @@ export default function OrderStatsPage() {
                     type="button"
                     onClick={() => {
                       setShowForm(false);
+                      setEditingId(null);
                       setForm({
                         orderId: "",
                         orderDate: "",
@@ -544,6 +607,7 @@ export default function OrderStatsPage() {
                   <th className="px-3 py-3">Original</th>
                   <th className="px-3 py-3">Refund</th>
                   <th className="px-3 py-3">Status</th>
+                  <th className="px-3 py-3">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -614,6 +678,22 @@ export default function OrderStatsPage() {
                         >
                           {item.status}
                         </span>
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleEdit(item)}
+                            className="rounded-md border border-border px-2 py-1 text-xs font-display text-gray-200 hover:border-accent/50 hover:text-white"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDelete(item)}
+                            className="rounded-md border border-border px-2 py-1 text-xs font-display text-red-300 hover:bg-red-900/30"
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))

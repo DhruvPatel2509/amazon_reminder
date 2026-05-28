@@ -1,10 +1,10 @@
 const Order = require("../models/Order");
 
-async function getProductImage(amazonLink) {
-  if (!amazonLink || !amazonLink.includes("amazon")) return "";
+async function getProductImage(link) {
+  if (!link) return "";
 
   try {
-    const response = await fetch(amazonLink, {
+    const response = await fetch(link, {
       headers: {
         "user-agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36",
@@ -21,7 +21,9 @@ async function getProductImage(amazonLink) {
       html.match(
         /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i,
       ) ||
-      html.match(/["']landingImage["']\s*:\s*["']([^"']+)["']/i) ||
+      html.match(/property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
+      // Amazon specific fallbacks
+      html.match(/['"]landingImage['"]\s*:\s*['"]([^'\"]+)['"]/i) ||
       html.match(/data-old-hires=["']([^"']+)["']/i) ||
       html.match(/id=["']landingImage["'][^>]+src=["']([^"']+)["']/i) ||
       html.match(/data-a-dynamic-image=["']\{&quot;([^&]+)&quot;/i);
