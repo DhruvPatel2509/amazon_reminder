@@ -249,7 +249,7 @@ export default function EditReminderPage() {
           <>
             {reminder.type === "refund" && (
               <div>
-                <label className="label">Review Date</label>
+                <label className="label">Refund Form Fill Date</label>
                 <input
                   type="date"
                   name="reviewDate"

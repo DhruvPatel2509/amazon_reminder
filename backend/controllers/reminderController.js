@@ -278,12 +278,10 @@ exports.createRefundReminder = async (req, res) => {
     } = req.body;
 
     if (!orderId || !orderDate || !refundDate) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Order ID, Order Date and Refund Date are required",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "Order ID, Order Date and Refund Date are required",
+      });
     }
 
     const computedRefundAmount =

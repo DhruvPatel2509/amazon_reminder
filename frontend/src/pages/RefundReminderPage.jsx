@@ -205,9 +205,9 @@ export default function RefundReminderPage() {
           />
         </div>
 
-        {/* Review Date */}
+        {/* Refund Form Fill Date */}
         <div>
-          <label className="label">Review Date</label>
+          <label className="label">Refund Form Fill Date</label>
           <input
             type="date"
             name="reviewDate"

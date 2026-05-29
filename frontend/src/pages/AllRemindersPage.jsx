@@ -62,7 +62,24 @@ function whatsappLink(reminder) {
   const rawNumber = String(reminder.contactPerson || "").replace(/\D/g, "");
   const number = rawNumber.length === 10 ? `91${rawNumber}` : rawNumber;
   if (number.length < 11) return "";
-  const amount = formatAmount(reminder.refundAmount);
+  const original =
+    reminder.originalAmount == null || reminder.originalAmount === ""
+      ? "-"
+      : formatAmount(reminder.originalAmount);
+  const less =
+    reminder.less == null || reminder.less === ""
+      ? "-"
+      : formatAmount(reminder.less);
+  const refundAmt =
+    reminder.refundAmount == null || reminder.refundAmount === ""
+      ? "-"
+      : formatAmount(reminder.refundAmount) || "-";
+  const refundFormDate = reminder.reviewDate
+    ? formatDate(reminder.reviewDate)
+    : "-";
+  const expectedDate = reminder.refundDate
+    ? formatDate(reminder.refundDate)
+    : "-";
   const message = [
     "Refund Inquiry",
     "",
@@ -70,11 +87,17 @@ function whatsappLink(reminder) {
     "",
     "Mera refund abhi tak credit nahi hua hai. Please status check karein:",
     "",
-    `Order ID: #${reminder.orderId}`,
+    `Order ID: ${reminder.orderId || "-"}`,
     "",
-    `Amount: ${amount || "Not filled"}`,
+    `Original Amount:- ${original}`,
     "",
-    `Expected Date: ${formatDate(reminder.refundDate)}`,
+    `Less:- ${less}`,
+    "",
+    `Amount: Rs. ${refundAmt}`,
+    "",
+    `Refund Form Fill Date:- ${refundFormDate}`,
+    "",
+    `Expected Date: ${expectedDate}`,
     "",
     "Thank you!",
   ].join("\n");
