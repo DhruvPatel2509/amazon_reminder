@@ -39,7 +39,11 @@ function formatDate(date) {
 }
 
 function getTargetDate(reminder) {
-  return reminder.type === "review" ? reminder.reviewDate : reminder.refundDate;
+  if (reminder.type === "review") return reminder.reviewDate;
+  if (reminder.type === "refundForm") {
+    return reminder.refundFormDate || reminder.refundDate;
+  }
+  return reminder.refundDate;
 }
 
 function isToday(date) {
@@ -50,6 +54,57 @@ function isToday(date) {
     target.getDate() === today.getDate() &&
     target.getMonth() === today.getMonth() &&
     target.getFullYear() === today.getFullYear()
+  );
+}
+
+function isFutureReminderDate(date) {
+  if (!date) return false;
+  const target = new Date(date);
+  const today = new Date();
+  target.setHours(0, 0, 0, 0);
+  today.setHours(0, 0, 0, 0);
+  return target >= today;
+}
+
+function orderToFutureReminders(order) {
+  const base = {
+    source: "order",
+    orderId: order.orderId,
+    orderDate: order.orderDate,
+    amazonLink: order.amazonLink,
+    productImage: order.productImage,
+    originalAmount: order.originalAmount,
+    refundAmount: order.refundAmount,
+    contactPerson: order.contactPerson,
+    notes: order.notes,
+    status: "upcoming",
+  };
+  const items = [
+    {
+      ...base,
+      _id: `${order._id}-review`,
+      type: "review",
+      reviewDate: order.reviewDate,
+    },
+    {
+      ...base,
+      _id: `${order._id}-refundForm`,
+      type: "refundForm",
+      refundFormDate: order.refundFormDate,
+      refundDate: order.refundFormDate,
+    },
+    {
+      ...base,
+      _id: `${order._id}-refund`,
+      type: "refund",
+      reviewDate: order.refundFormDate,
+      refundDate: order.refundDate,
+      status: order.refundStatus === "credited" ? "completed" : "upcoming",
+    },
+  ];
+
+  return items.filter(
+    (item) => item.status !== "completed" && isFutureReminderDate(getTargetDate(item)),
   );
 }
 
@@ -122,10 +177,10 @@ function TodayTaskItem({ reminder }) {
       </div>
       <div className="flex flex-wrap gap-2">
         <Link
-          to={`/edit/${reminder._id}`}
+          to={reminder.source === "order" ? "/order-stats" : `/edit/${reminder._id}`}
           className="w-fit rounded-md border border-border bg-card px-3 py-2 text-xs font-display font-semibold text-gray-100 hover:border-accent/50"
         >
-          Open Task
+          {reminder.source === "order" ? "Open Order" : "Open Task"}
         </Link>
         {messageLink && (
           <a
@@ -189,10 +244,10 @@ function ReminderListItem({ reminder }) {
 
           <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
             <Link
-              to={`/edit/${reminder._id}`}
+              to={reminder.source === "order" ? "/order-stats" : `/edit/${reminder._id}`}
               className="rounded-md border border-border px-2 py-1 font-display text-gray-200 hover:border-accent/50 hover:text-white"
             >
-              Edit
+              {reminder.source === "order" ? "Open Order" : "Edit"}
             </Link>
             {reminder.amazonLink && (
               <a
@@ -255,8 +310,8 @@ export default function AllRemindersPage() {
   const fetchReminders = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.get("/reminders", { params: { sort: "desc" } });
-      const items = res.data.data || [];
+      const res = await api.get("/orders", { params: { sort: "desc" } });
+      const items = (res.data.data || []).flatMap(orderToFutureReminders);
       // Sort reminders by nearest target date (earliest first). Null/empty dates go last.
       items.sort((a, b) => {
         const da = getTargetDate(a)

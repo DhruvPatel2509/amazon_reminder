@@ -34,6 +34,54 @@ async function getProductImage(link) {
   }
 }
 
+function blankContactQuery(group) {
+  return {
+    orderGroup: group,
+    $or: [
+      { contactPerson: "" },
+      { contactPerson: null },
+      { contactPerson: { $exists: false } },
+    ],
+  };
+}
+
+async function getGroupContactPerson(orderGroup) {
+  const group = String(orderGroup || "").trim();
+  if (!group) return "";
+
+  const source = await Order.findOne({
+    orderGroup: group,
+    contactPerson: { $nin: ["", null] },
+  }).sort({ updatedAt: -1 });
+
+  return source?.contactPerson || "";
+}
+
+async function syncGroupContactPerson(orderGroup, contactPerson) {
+  const group = String(orderGroup || "").trim();
+  const contact = String(contactPerson || "").trim();
+  if (!group || !contact) return;
+
+  await Order.updateMany(blankContactQuery(group), {
+    $set: { contactPerson: contact },
+  });
+}
+
+async function syncAllGroupContactPersons() {
+  const sources = await Order.find({
+    orderGroup: { $nin: ["", null] },
+    contactPerson: { $nin: ["", null] },
+  }).sort({ updatedAt: -1 });
+
+  const seenGroups = new Set();
+  for (const source of sources) {
+    const group = String(source.orderGroup || "").trim();
+    if (!group || seenGroups.has(group)) continue;
+    seenGroups.add(group);
+    await syncGroupContactPerson(group, source.contactPerson);
+  }
+}
+
 // GET all orders
 exports.getAllOrders = async (req, res) => {
   try {
@@ -43,6 +91,7 @@ exports.getAllOrders = async (req, res) => {
     if (group && group !== "all") query.orderGroup = group;
 
     const sortOption = sort === "asc" ? { orderDate: 1 } : { orderDate: -1 };
+    await syncAllGroupContactPersons();
     const all = await Order.find(query).sort(sortOption);
 
     // Auto-fill productImage if missing (try extract from amazonLink)
@@ -69,10 +118,14 @@ exports.createOrder = async (req, res) => {
     const {
       orderId,
       orderDate,
+      reviewDate,
       amazonLink,
+      refundFormDate,
       refundDate,
       originalAmount,
       refundAmount,
+      refundStatus,
+      contactPerson,
       orderGroup,
       notes,
       productImage,
@@ -85,19 +138,26 @@ exports.createOrder = async (req, res) => {
     }
 
     const finalImage = productImage || (await getProductImage(amazonLink));
+    const resolvedContactPerson =
+      contactPerson || (await getGroupContactPerson(orderGroup));
 
     const order = new Order({
       orderId,
       orderDate,
+      reviewDate: reviewDate || null,
       amazonLink,
       productImage: finalImage,
+      refundFormDate: refundFormDate || null,
       refundDate,
       originalAmount: originalAmount === "" ? null : originalAmount,
       refundAmount: refundAmount === "" ? null : refundAmount,
+      refundStatus: refundStatus || "pending",
+      contactPerson: resolvedContactPerson,
       orderGroup,
       notes,
     });
     await order.save();
+    await syncGroupContactPerson(orderGroup, resolvedContactPerson);
     res.status(201).json({ success: true, data: order });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -111,10 +171,14 @@ exports.updateOrder = async (req, res) => {
     const {
       orderId,
       orderDate,
+      reviewDate,
       amazonLink,
+      refundFormDate,
       refundDate,
       originalAmount,
       refundAmount,
+      refundStatus,
+      contactPerson,
       orderGroup,
       notes,
       productImage,
@@ -129,17 +193,23 @@ exports.updateOrder = async (req, res) => {
     }
 
     const finalImage = productImage || (await getProductImage(amazonLink));
+    const resolvedContactPerson =
+      contactPerson || (await getGroupContactPerson(orderGroup));
 
     const order = await Order.findByIdAndUpdate(
       id,
       {
         orderId,
         orderDate,
+        reviewDate: reviewDate || null,
         amazonLink,
         productImage: finalImage,
+        refundFormDate: refundFormDate || null,
         refundDate,
         originalAmount: originalAmount === "" ? null : originalAmount,
         refundAmount: refundAmount === "" ? null : refundAmount,
+        refundStatus,
+        contactPerson: resolvedContactPerson,
         orderGroup,
         notes,
         status,
@@ -153,6 +223,7 @@ exports.updateOrder = async (req, res) => {
         .json({ success: false, message: "Order not found" });
     }
 
+    await syncGroupContactPerson(orderGroup, resolvedContactPerson);
     res.json({ success: true, data: order });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });

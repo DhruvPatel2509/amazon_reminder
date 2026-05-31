@@ -28,6 +28,67 @@ function groupByOrder(reminders) {
   }));
 }
 
+function startOfToday() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return today;
+}
+
+function isFutureReminderDate(date) {
+  if (!date) return false;
+  const target = new Date(date);
+  target.setHours(0, 0, 0, 0);
+  return target >= startOfToday();
+}
+
+function orderToFutureReminders(order) {
+  const base = {
+    source: 'order',
+    orderId: order.orderId,
+    orderDate: order.orderDate,
+    amazonLink: order.amazonLink,
+    productImage: order.productImage,
+    originalAmount: order.originalAmount,
+    refundAmount: order.refundAmount,
+    contactPerson: order.contactPerson,
+    notes: order.notes,
+    status: 'upcoming',
+  };
+  const items = [
+    {
+      ...base,
+      _id: `${order._id}-review`,
+      type: 'review',
+      reviewDate: order.reviewDate,
+    },
+    {
+      ...base,
+      _id: `${order._id}-refundForm`,
+      type: 'refundForm',
+      refundFormDate: order.refundFormDate,
+      refundDate: order.refundFormDate,
+    },
+    {
+      ...base,
+      _id: `${order._id}-refund`,
+      type: 'refund',
+      reviewDate: order.refundFormDate,
+      refundDate: order.refundDate,
+      status: order.refundStatus === 'credited' ? 'completed' : 'upcoming',
+    },
+  ];
+
+  return items.filter((item) => {
+    const date =
+      item.type === 'review'
+        ? item.reviewDate
+        : item.type === 'refundForm'
+          ? item.refundFormDate
+          : item.refundDate;
+    return item.status !== 'completed' && isFutureReminderDate(date);
+  });
+}
+
 export default function HomePage() {
   const [reminders, setReminders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -39,14 +100,22 @@ export default function HomePage() {
   const fetchReminders = useCallback(async () => {
     setLoading(true);
     try {
-      const params = {};
-      if (search) params.search = search;
-      if (statusFilter !== 'all') params.status = statusFilter;
-      if (typeFilter !== 'all') params.type = typeFilter;
-      params.sort = sort;
+      const res = await api.get('/orders', { params: { sort } });
+      let items = (res.data.data || []).flatMap(orderToFutureReminders);
 
-      const res = await api.get('/reminders', { params });
-      setReminders(res.data.data || []);
+      if (search) {
+        const query = search.toLowerCase();
+        items = items.filter((item) =>
+          String(item.orderId || '').toLowerCase().includes(query),
+        );
+      }
+      if (statusFilter !== 'all') {
+        items = items.filter((item) => item.status === statusFilter);
+      }
+      if (typeFilter !== 'all') {
+        items = items.filter((item) => item.type === typeFilter);
+      }
+      setReminders(items);
     } catch (err) {
       console.error('Failed to fetch reminders', err);
     } finally {
@@ -169,13 +238,13 @@ export default function HomePage() {
           <p className="text-muted text-sm mb-6">
             {search || statusFilter !== 'all' || typeFilter !== 'all'
               ? 'Try adjusting your filters'
-              : 'Create your first manual reminder to get started'}
+              : 'Add future dates in order stats to show reminders here'}
           </p>
-          <Link to="/review-reminder" className="btn-primary inline-flex items-center gap-2">
+          <Link to="/order-stats" className="btn-primary inline-flex items-center gap-2">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
-            Add Reminder
+            Open Order Stats
           </Link>
         </div>
       ) : (

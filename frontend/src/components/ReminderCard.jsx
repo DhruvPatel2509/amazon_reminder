@@ -44,7 +44,11 @@ function formatDate(d) {
 }
 
 function targetDate(reminder) {
-  return reminder.type === "review" ? reminder.reviewDate : reminder.refundDate;
+  if (reminder.type === "review") return reminder.reviewDate;
+  if (reminder.type === "refundForm") {
+    return reminder.refundFormDate || reminder.refundDate;
+  }
+  return reminder.refundDate;
 }
 
 function daysRemaining(dateStr) {
@@ -129,6 +133,7 @@ function ReminderRow({ reminder, onDelete, onStatusChange }) {
   const status = statusConfig[reminder.status] || statusConfig.upcoming;
   const refundDaysRemaining =
     reminder.type === "refund" ? daysRemaining(reminder.refundDate) : null;
+  const isOrderDerived = reminder.source === "order";
   const canSendRefundMessage =
     reminder.type === "refund" &&
     reminder.status !== "completed" &&
@@ -137,6 +142,7 @@ function ReminderRow({ reminder, onDelete, onStatusChange }) {
     whatsappLink(reminder);
 
   const handleDelete = async () => {
+    if (isOrderDerived) return;
     if (!window.confirm(`Delete ${type.label} for Order #${reminder.orderId}?`))
       return;
     try {
@@ -148,6 +154,7 @@ function ReminderRow({ reminder, onDelete, onStatusChange }) {
   };
 
   const handleMarkComplete = async () => {
+    if (isOrderDerived) return;
     try {
       await api.put(`/reminders/${reminder._id}`, { status: "completed" });
       onStatusChange(reminder._id, "completed");
@@ -210,12 +217,12 @@ function ReminderRow({ reminder, onDelete, onStatusChange }) {
 
       <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
         <Link
-          to={`/edit/${reminder._id}`}
+          to={isOrderDerived ? "/order-stats" : `/edit/${reminder._id}`}
           className="rounded-lg border border-border px-3 py-2 text-xs font-display font-medium text-gray-200 hover:border-accent/50 hover:text-white"
         >
-          Edit
+          {isOrderDerived ? "Open Order" : "Edit"}
         </Link>
-        {reminder.status !== "completed" && (
+        {!isOrderDerived && reminder.status !== "completed" && (
           <button
             onClick={handleMarkComplete}
             className="rounded-lg border border-green-800/50 px-3 py-2 text-xs font-display font-medium text-green-300 hover:bg-green-900/30 hover:text-white"
@@ -233,12 +240,14 @@ function ReminderRow({ reminder, onDelete, onStatusChange }) {
             Send Message
           </a>
         )}
-        <button
-          onClick={handleDelete}
-          className="rounded-lg border border-border px-3 py-2 text-xs font-display font-medium text-gray-300 hover:border-red-800/50 hover:bg-red-900/20 hover:text-red-300"
-        >
-          Delete
-        </button>
+        {!isOrderDerived && (
+          <button
+            onClick={handleDelete}
+            className="rounded-lg border border-border px-3 py-2 text-xs font-display font-medium text-gray-300 hover:border-red-800/50 hover:bg-red-900/20 hover:text-red-300"
+          >
+            Delete
+          </button>
+        )}
       </div>
     </div>
   );

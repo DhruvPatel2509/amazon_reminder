@@ -18,10 +18,87 @@ function formatDate(value) {
   return new Date(value).toLocaleDateString("en-IN");
 }
 
+function daysRemaining(dateStr) {
+  if (!dateStr) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(dateStr);
+  target.setHours(0, 0, 0, 0);
+  return Math.round((target - today) / (1000 * 60 * 60 * 24));
+}
+
+function daysBetweenDates(startDate, endDate) {
+  if (!startDate || !endDate) return "-";
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  start.setHours(0, 0, 0, 0);
+  end.setHours(0, 0, 0, 0);
+  const days = Math.round((end - start) / (1000 * 60 * 60 * 24));
+  return `${days} days`;
+}
+
+function whatsappNumber(number) {
+  const digits = String(number || "").replace(/\D/g, "");
+  if (digits.length === 10) return `91${digits}`;
+  return digits.length >= 11 ? digits : "";
+}
+
+function whatsappMessageLink(reminder) {
+  const number = whatsappNumber(reminder.contactPerson);
+  if (!number) return "";
+
+  const original =
+    reminder.originalAmount == null || reminder.originalAmount === ""
+      ? "-"
+      : formatAmount(reminder.originalAmount);
+  const less =
+    reminder.less == null || reminder.less === ""
+      ? "-"
+      : formatAmount(reminder.less);
+  const refundAmt =
+    reminder.refundAmount == null || reminder.refundAmount === ""
+      ? "-"
+      : formatAmount(reminder.refundAmount);
+  const refundFormDate = reminder.reviewDate
+    ? formatDate(reminder.reviewDate)
+    : "-";
+  const expectedDate = reminder.refundDate
+    ? formatDate(reminder.refundDate)
+    : "-";
+
+  const message = [
+    "Refund Inquiry",
+    "",
+    "Hello,",
+    "",
+    "Mera refund abhi tak credit nahi hua hai. Please status check karein:",
+    "",
+    `Order ID: ${reminder.orderId || "-"}`,
+    "",
+    `Original Amount:- ${original}`,
+    "",
+    `Less:- ${less}`,
+    "",
+    `Amount: ${refundAmt}`,
+    "",
+    `Refund Form Fill Date:- ${refundFormDate}`,
+    "",
+    `Expected Date: ${expectedDate}`,
+    "",
+    "Thank you!",
+  ].join("\n");
+
+  return `https://wa.me/${number}?text=${encodeURIComponent(message)}`;
+}
+
 function sortReminders(reminders, sortBy, sortOrder) {
   return [...reminders].sort((a, b) => {
     const factor = sortOrder === "asc" ? 1 : -1;
-    if (sortBy === "orderDate" || sortBy === "refundDate") {
+    if (
+      sortBy === "orderDate" ||
+      sortBy === "refundFormDate" ||
+      sortBy === "refundDate"
+    ) {
       return (new Date(a[sortBy]) - new Date(b[sortBy])) * factor;
     }
     if (sortBy === "orderGroup") {
@@ -40,23 +117,30 @@ export default function OrderStatsPage() {
   const [form, setForm] = useState({
     orderId: "",
     orderDate: "",
+    reviewDate: "",
     amazonLink: "",
     productImage: "",
+    refundFormDate: "",
     refundDate: "",
     originalAmount: "",
     refundAmount: "",
+    refundStatus: "pending",
+    contactPerson: "",
     orderGroup: "",
     notes: "",
   });
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [loadingOrders, setLoadingOrders] = useState(true);
+  const [statusUpdating, setStatusUpdating] = useState({});
+  const [statusMessage, setStatusMessage] = useState("");
   const [success, setSuccess] = useState(false);
   const [orders, setOrders] = useState([]);
+  const [orderReminders, setOrderReminders] = useState({});
   const [groupFilter, setGroupFilter] = useState("all");
   const [searchText, setSearchText] = useState("");
   const [sortBy, setSortBy] = useState("refundDate");
-  const [sortOrder, setSortOrder] = useState("asc");
+  const [sortOrder, setSortOrder] = useState("desc");
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
 
@@ -72,8 +156,27 @@ export default function OrderStatsPage() {
     }
   };
 
+  const fetchReminders = async () => {
+    try {
+      const res = await api.get("/reminders");
+      const reminders = res.data.data || [];
+      const map = reminders.reduce((acc, reminder) => {
+        const key = String(reminder.orderId || "").trim();
+        if (!key) return acc;
+        if (!acc[key]) acc[key] = {};
+        if (reminder.type === "refundForm") acc[key].refundForm = reminder;
+        if (reminder.type === "refund") acc[key].refund = reminder;
+        return acc;
+      }, {});
+      setOrderReminders(map);
+    } catch (err) {
+      console.error("Failed to fetch reminders", err);
+    }
+  };
+
   useEffect(() => {
     fetchOrders();
+    fetchReminders();
   }, []);
 
   const validate = () => {
@@ -108,11 +211,15 @@ export default function OrderStatsPage() {
       setForm({
         orderId: "",
         orderDate: "",
+        reviewDate: "",
         amazonLink: "",
         productImage: "",
+        refundFormDate: "",
         refundDate: "",
         originalAmount: "",
         refundAmount: "",
+        refundStatus: "pending",
+        contactPerson: "",
         orderGroup: "",
         notes: "",
       });
@@ -134,11 +241,15 @@ export default function OrderStatsPage() {
     setForm({
       orderId: item.orderId || "",
       orderDate: formatDateInput(item.orderDate),
+      reviewDate: formatDateInput(item.reviewDate),
       amazonLink: item.amazonLink || "",
       productImage: item.productImage || "",
+      refundFormDate: formatDateInput(item.refundFormDate),
       refundDate: formatDateInput(item.refundDate),
       originalAmount: item.originalAmount || "",
       refundAmount: item.refundAmount || "",
+      refundStatus: item.refundStatus || "pending",
+      contactPerson: item.contactPerson || "",
       orderGroup: item.orderGroup || "",
       notes: item.notes || "",
     });
@@ -161,6 +272,48 @@ export default function OrderStatsPage() {
       setErrors({
         general: err.response?.data?.message || "Failed to delete order",
       });
+    }
+  };
+
+  const saveRefundStatus = async (item, refundStatus) => {
+    if (refundStatus === (item.refundStatus || "pending")) return;
+
+    setStatusUpdating((prev) => ({ ...prev, [item._id]: true }));
+    try {
+      await api.put(`/orders/${item._id}`, {
+        orderId: item.orderId,
+        orderDate: item.orderDate,
+        reviewDate: item.reviewDate || "",
+        amazonLink: item.amazonLink || "",
+        productImage: item.productImage || "",
+        refundFormDate: item.refundFormDate || "",
+        refundDate: item.refundDate,
+        originalAmount: item.originalAmount ?? "",
+        refundAmount: item.refundAmount ?? "",
+        refundStatus,
+        contactPerson: item.contactPerson || "",
+        orderGroup: item.orderGroup || "",
+        notes: item.notes || "",
+        status: item.status || "open",
+      });
+      setOrders((prev) =>
+        prev.map((order) =>
+          order._id === item._id ? { ...order, refundStatus } : order,
+        ),
+      );
+      refresh();
+      setStatusMessage(
+        `Refund status for ${item.orderId} updated to ${refundStatus}.`,
+      );
+      setTimeout(() => setStatusMessage(""), 3000);
+    } catch (err) {
+      console.error("Failed to update refund status", err);
+      setErrors({
+        general:
+          err.response?.data?.message || "Failed to update refund status",
+      });
+    } finally {
+      setStatusUpdating((prev) => ({ ...prev, [item._id]: false }));
     }
   };
 
@@ -191,35 +344,33 @@ export default function OrderStatsPage() {
       count: filteredOrders.length,
       totalOriginal: 0,
       totalRefund: 0,
+      totalCreditedRefund: 0,
+      pendingRefundAmount: 0,
       totalSpent: 0,
       overdueCount: 0,
       upcomingCount: 0,
       completedCount: 0,
-      avgDaysToRefund: 0,
       groups: {},
+      refundAmountByStatus: {
+        pending: 0,
+        credited: 0,
+        cancelled: 0,
+      },
     };
-
-    let totalDays = 0;
 
     filteredOrders.forEach((item) => {
       const original = Number(item.originalAmount || 0);
       const refund = Number(item.refundAmount || 0);
+      const refundStatus = item.refundStatus || "pending";
+
       summary.totalOriginal += original;
       summary.totalRefund += refund;
+      summary.refundAmountByStatus[refundStatus] += refund;
+      if (refundStatus === "pending") summary.pendingRefundAmount += refund;
+      if (refundStatus === "credited") summary.totalCreditedRefund += refund;
+
       if (item.status === "refunded") summary.completedCount += 1;
       else if (item.status === "failed") summary.overdueCount += 1;
-      else summary.upcomingCount += 1;
-
-      const days =
-        item.orderDate && item.refundDate
-          ? Math.round(
-              (new Date(item.refundDate) - new Date(item.orderDate)) /
-                (1000 * 60 * 60 * 24),
-            )
-          : 0;
-      if (item.orderDate && item.refundDate) {
-        totalDays += days;
-      }
 
       const key = item.orderGroup?.trim() || "Unassigned";
       if (!summary.groups[key]) {
@@ -230,12 +381,19 @@ export default function OrderStatsPage() {
       summary.groups[key].totalRefund += refund;
     });
 
-    summary.avgDaysToRefund = summary.count
-      ? Math.round(totalDays / summary.count)
-      : 0;
-    // total spent = original - refund
-    summary.totalSpent = summary.totalOriginal - summary.totalRefund;
+    summary.totalSpent = summary.totalOriginal - summary.totalCreditedRefund;
     return summary;
+  }, [filteredOrders]);
+
+  const refundStatusSummary = useMemo(() => {
+    return filteredOrders.reduce(
+      (acc, order) => {
+        const status = order.refundStatus || "pending";
+        if (acc[status] !== undefined) acc[status] += 1;
+        return acc;
+      },
+      { pending: 0, credited: 0, cancelled: 0 },
+    );
   }, [filteredOrders]);
 
   return (
@@ -276,11 +434,15 @@ export default function OrderStatsPage() {
               setForm({
                 orderId: "",
                 orderDate: "",
+                reviewDate: "",
                 amazonLink: "",
                 productImage: "",
+                refundFormDate: "",
                 refundDate: "",
                 originalAmount: "",
                 refundAmount: "",
+                refundStatus: "pending",
+                contactPerson: "",
                 orderGroup: "",
                 notes: "",
               });
@@ -296,6 +458,12 @@ export default function OrderStatsPage() {
       {success && (
         <div className="mb-6 rounded-xl border border-green-800/50 bg-green-900/20 p-4 text-green-200">
           Order saved successfully. Summary updated.
+        </div>
+      )}
+
+      {statusMessage && (
+        <div className="mb-6 rounded-xl border border-green-800/50 bg-green-900/20 p-4 text-green-200">
+          {statusMessage}
         </div>
       )}
 
@@ -366,6 +534,26 @@ export default function OrderStatsPage() {
                     )}
                   </div>
                   <div>
+                    <label className="label">Review Date</label>
+                    <input
+                      type="date"
+                      name="reviewDate"
+                      value={form.reviewDate}
+                      onChange={handleChange}
+                      className="input-field"
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Refund Form Fill Date</label>
+                    <input
+                      type="date"
+                      name="refundFormDate"
+                      value={form.refundFormDate}
+                      onChange={handleChange}
+                      className="input-field"
+                    />
+                  </div>
+                  <div>
                     <label className="label">Refund Date *</label>
                     <input
                       type="date"
@@ -406,6 +594,30 @@ export default function OrderStatsPage() {
                       min="0"
                       step="0.01"
                       placeholder="0.00"
+                      className="input-field"
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Refund</label>
+                    <select
+                      name="refundStatus"
+                      value={form.refundStatus}
+                      onChange={handleChange}
+                      className="input-field cursor-pointer"
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="credited">Credited</option>
+                      <option value="cancelled">Cancelled</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="label">Contact Person</label>
+                    <input
+                      type="text"
+                      name="contactPerson"
+                      value={form.contactPerson}
+                      onChange={handleChange}
+                      placeholder="Name or WhatsApp number"
                       className="input-field"
                     />
                   </div>
@@ -484,11 +696,15 @@ export default function OrderStatsPage() {
                       setForm({
                         orderId: "",
                         orderDate: "",
+                        reviewDate: "",
                         amazonLink: "",
                         productImage: "",
                         refundDate: "",
+                        refundFormDate: "",
                         originalAmount: "",
                         refundAmount: "",
+                        refundStatus: "pending",
+                        contactPerson: "",
                         orderGroup: "",
                         notes: "",
                       });
@@ -504,12 +720,57 @@ export default function OrderStatsPage() {
         )}
 
         <section className="space-y-6">
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-3xl border border-border bg-card p-5">
               <span className="label">Total orders</span>
               <p className="text-3xl font-bold text-white">{stats.count}</p>
               <p className="text-gray-400 text-sm mt-1">
                 Orders matching current filters
+              </p>
+            </div>
+            <div className="rounded-3xl border border-border bg-card p-5">
+              <span className="label">Pending refunds</span>
+              <p className="text-3xl font-bold text-amber-200">
+                {refundStatusSummary.pending}
+              </p>
+              <p className="text-gray-400 text-sm mt-1">
+                Refunds waiting for credit
+              </p>
+            </div>
+            <div className="rounded-3xl border border-border bg-card p-5">
+              <span className="label">Pending refund amount</span>
+              <p className="text-3xl font-bold text-amber-200">
+                {formatAmount(stats.pendingRefundAmount)}
+              </p>
+              <p className="text-gray-400 text-sm mt-1">
+                Amount not yet credited
+              </p>
+            </div>
+            <div className="rounded-3xl border border-border bg-card p-5">
+              <span className="label">Credited refunds</span>
+              <p className="text-3xl font-bold text-emerald-200">
+                {refundStatusSummary.credited}
+              </p>
+              <p className="text-gray-400 text-sm mt-1">
+                Refunds already processed
+              </p>
+            </div>
+            <div className="rounded-3xl border border-border bg-card p-5">
+              <span className="label">Total credited refund</span>
+              <p className="text-3xl font-bold text-emerald-200">
+                {formatAmount(stats.totalCreditedRefund)}
+              </p>
+              <p className="text-gray-400 text-sm mt-1">
+                Only credited refund amount
+              </p>
+            </div>
+            <div className="rounded-3xl border border-border bg-card p-5">
+              <span className="label">Cancelled refunds</span>
+              <p className="text-3xl font-bold text-red-200">
+                {refundStatusSummary.cancelled}
+              </p>
+              <p className="text-gray-400 text-sm mt-1">
+                Refunds cancelled or voided
               </p>
             </div>
             <div className="rounded-3xl border border-border bg-card p-5">
@@ -519,27 +780,12 @@ export default function OrderStatsPage() {
               </p>
             </div>
             <div className="rounded-3xl border border-border bg-card p-5">
-              <span className="label">Total refund</span>
-              <p className="text-3xl font-bold text-white">
-                {formatAmount(stats.totalRefund)}
-              </p>
-            </div>
-            <div className="rounded-3xl border border-border bg-card p-5">
               <span className="label">Money spent</span>
               <p className="text-3xl font-bold text-white">
                 {formatAmount(stats.totalSpent)}
               </p>
               <p className="text-gray-400 text-sm mt-1">
-                Total original minus refunds
-              </p>
-            </div>
-            <div className="rounded-3xl border border-border bg-card p-5">
-              <span className="label">Average days</span>
-              <p className="text-3xl font-bold text-white">
-                {stats.avgDaysToRefund || "-"}
-              </p>
-              <p className="text-gray-400 text-sm mt-1">
-                Order → Refund interval
+                Total original minus credited refunds
               </p>
             </div>
           </div>
@@ -572,6 +818,7 @@ export default function OrderStatsPage() {
                   className="input-field cursor-pointer"
                 >
                   <option value="orderDate">Order Date</option>
+                  <option value="refundFormDate">Refund Form Fill Date</option>
                   <option value="refundDate">Refund Date</option>
                   <option value="originalAmount">Original Amount</option>
                   <option value="refundAmount">Refund Amount</option>
@@ -606,11 +853,12 @@ export default function OrderStatsPage() {
                   <th className="px-3 py-3">Order ID</th>
                   <th className="px-3 py-3">Group</th>
                   <th className="px-3 py-3">Order Date</th>
-                  <th className="px-3 py-3">Refund Date</th>
+                  <th className="px-3 py-3">Refund Form</th>
+                  <th className="px-3 py-3">Refund</th>
                   <th className="px-3 py-3">Refund Interval</th>
                   <th className="px-3 py-3">Original</th>
                   <th className="px-3 py-3">Refund</th>
-                  <th className="px-3 py-3">Status</th>
+                  <th className="px-3 py-3">Refund Status</th>
                   <th className="px-3 py-3">Actions</th>
                 </tr>
               </thead>
@@ -618,7 +866,7 @@ export default function OrderStatsPage() {
                 {loadingOrders ? (
                   <tr>
                     <td
-                      colSpan="10"
+                      colSpan="11"
                       className="px-3 py-10 text-center text-gray-400"
                     >
                       <div className="flex flex-col items-center gap-3">
@@ -630,89 +878,118 @@ export default function OrderStatsPage() {
                 ) : filteredOrders.length === 0 ? (
                   <tr>
                     <td
-                      colSpan="10"
+                      colSpan="11"
                       className="px-3 py-10 text-center text-gray-400"
                     >
                       No orders found.
                     </td>
                   </tr>
                 ) : (
-                  filteredOrders.map((item) => (
-                    <tr
-                      key={item._id}
-                      className="border-b border-border hover:bg-white/5"
-                    >
-                      <td className="px-3 py-3">
-                        {item.productImage ? (
-                          <img
-                            src={item.productImage}
-                            alt="product"
-                            className="h-12 w-12 object-contain bg-white rounded"
-                          />
-                        ) : (
-                          <div className="h-12 w-12 flex items-center justify-center bg-card text-gray-400 rounded">
-                            —
+                  filteredOrders.map((item) => {
+                    const reminderEntry =
+                      orderReminders[String(item.orderId || "").trim()] || {};
+                    const refundReminder = reminderEntry.refund;
+                    const refundFormDate =
+                      item.refundFormDate || refundReminder?.reviewDate || "";
+                    const refundDate =
+                      refundReminder?.refundDate || item.refundDate || "";
+                    const refundReminderLink =
+                      refundReminder && refundReminder.status !== "completed"
+                        ? whatsappMessageLink(refundReminder)
+                        : "";
+                    const showRefundMessage =
+                      refundReminderLink &&
+                      refundReminder?.refundDate &&
+                      daysRemaining(refundReminder?.refundDate) <= 0 &&
+                      item.refundStatus !== "credited";
+
+                    return (
+                      <tr
+                        key={item._id}
+                        className="border-b border-border hover:bg-white/5"
+                      >
+                        <td className="px-3 py-3">
+                          {item.productImage ? (
+                            <img
+                              src={item.productImage}
+                              alt="product"
+                              className="h-12 w-12 object-contain bg-white rounded"
+                            />
+                          ) : (
+                            <div className="h-12 w-12 flex items-center justify-center bg-card text-gray-400 rounded">
+                              —
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-3 py-3 font-medium text-white">
+                          #{item.orderId}
+                        </td>
+                        <td className="px-3 py-3">
+                          {item.orderGroup || "Unassigned"}
+                        </td>
+                        <td className="px-3 py-3">
+                          {formatDate(item.orderDate)}
+                        </td>
+                        <td className="px-3 py-3">
+                          {refundFormDate ? formatDate(refundFormDate) : "-"}
+                        </td>
+                        <td className="px-3 py-3">
+                          {refundDate
+                            ? formatDate(refundDate)
+                            : "-"}
+                        </td>
+                        <td className="px-3 py-3">
+                          {daysBetweenDates(refundFormDate, refundDate)}
+                        </td>
+                        <td className="px-3 py-3">
+                          {formatAmount(item.originalAmount)}
+                        </td>
+                        <td className="px-3 py-3">
+                          {formatAmount(item.refundAmount)}
+                        </td>
+                        <td className="px-3 py-3">
+                          <select
+                            value={item.refundStatus || "pending"}
+                            onChange={(e) =>
+                              saveRefundStatus(item, e.target.value)
+                            }
+                            disabled={Boolean(statusUpdating[item._id])}
+                            className="input-field min-w-[140px] w-full cursor-pointer"
+                          >
+                            <option value="pending">Pending</option>
+                            <option value="credited">Credited</option>
+                            <option value="cancelled">Cancelled</option>
+                          </select>
+                        </td>
+                        <td className="px-3 py-3">
+                          <div className="flex flex-wrap gap-2">
+                            {showRefundMessage && (
+                              <a
+                                href={refundReminderLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="rounded-md border border-green-700/60 bg-green-900/20 px-2 py-1 text-xs font-medium text-green-200 hover:bg-green-900/40"
+                              >
+                                Send message
+                              </a>
+                            )}
+                            <button
+                              onClick={() => handleEdit(item)}
+                              className="rounded-md border border-border px-2 py-1 text-xs font-display text-gray-200 hover:border-accent/50 hover:text-white"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleDelete(item)}
+                              className="rounded-md border border-border px-2 py-1 text-xs font-display text-red-300 hover:bg-red-900/30"
+                            >
+                              Delete
+                            </button>
                           </div>
-                        )}
-                      </td>
-                      <td className="px-3 py-3 font-medium text-white">
-                        #{item.orderId}
-                      </td>
-                      <td className="px-3 py-3">
-                        {item.orderGroup || "Unassigned"}
-                      </td>
-                      <td className="px-3 py-3">
-                        {formatDate(item.orderDate)}
-                      </td>
-                      <td className="px-3 py-3">
-                        {formatDate(item.refundDate)}
-                      </td>
-                      <td className="px-3 py-3">
-                        {item.orderDate && item.refundDate
-                          ? `${Math.round(
-                              (new Date(item.refundDate) -
-                                new Date(item.orderDate)) /
-                                (1000 * 60 * 60 * 24),
-                            )}d`
-                          : "-"}
-                      </td>
-                      <td className="px-3 py-3">
-                        {formatAmount(item.originalAmount)}
-                      </td>
-                      <td className="px-3 py-3">
-                        {formatAmount(item.refundAmount)}
-                      </td>
-                      <td className="px-3 py-3">
-                        <span
-                          className={`inline-flex rounded-full px-2 py-1 text-[11px] font-semibold uppercase ${
-                            item.status === "refunded"
-                              ? "bg-green-900/50 text-green-300"
-                              : item.status === "failed"
-                                ? "bg-red-900/50 text-red-300"
-                                : "bg-yellow-900/50 text-yellow-300"
-                          }`}
-                        >
-                          {item.status}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3">
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleEdit(item)}
-                            className="rounded-md border border-border px-2 py-1 text-xs font-display text-gray-200 hover:border-accent/50 hover:text-white"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => handleDelete(item)}
-                            className="rounded-md border border-border px-2 py-1 text-xs font-display text-red-300 hover:bg-red-900/30"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>

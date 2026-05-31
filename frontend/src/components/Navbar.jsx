@@ -17,46 +17,6 @@ const links = [
     ),
   },
   {
-    to: "/review-reminder",
-    label: "Review",
-    desktopLabel: "Review Reminder",
-    active: "bg-accent/15 text-accent border border-accent/30",
-    icon: (
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M11.049 2.927l1.519 4.674a1 1 0 00.95.69h4.915l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888 1.518-4.674a1 1 0 00-.363-1.118L3.165 8.291h4.914a1 1 0 00.951-.69l1.519-4.674z"
-      />
-    ),
-  },
-  {
-    to: "/refund-form-reminder",
-    label: "Refund Form",
-    active: "bg-cyan-500/15 text-cyan-200 border border-cyan-500/30",
-    icon: (
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M9 12h6m-6 4h6M7 4h7l3 3v13H7V4z"
-      />
-    ),
-  },
-  {
-    to: "/refund-reminder",
-    label: "Refund",
-    active: "bg-blue-500/15 text-blue-200 border border-blue-500/30",
-    icon: (
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"
-      />
-    ),
-  },
-  {
     to: "/order-stats",
     label: "Order Stats",
     active: "bg-purple-500/15 text-purple-200 border border-purple-500/30",
