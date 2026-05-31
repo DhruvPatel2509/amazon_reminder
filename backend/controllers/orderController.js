@@ -103,3 +103,76 @@ exports.createOrder = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+
+// PUT update order
+exports.updateOrder = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      orderId,
+      orderDate,
+      amazonLink,
+      refundDate,
+      originalAmount,
+      refundAmount,
+      orderGroup,
+      notes,
+      productImage,
+      status,
+    } = req.body;
+
+    if (!orderId || !orderDate) {
+      return res.status(400).json({
+        success: false,
+        message: "Order ID and Order Date are required",
+      });
+    }
+
+    const finalImage = productImage || (await getProductImage(amazonLink));
+
+    const order = await Order.findByIdAndUpdate(
+      id,
+      {
+        orderId,
+        orderDate,
+        amazonLink,
+        productImage: finalImage,
+        refundDate,
+        originalAmount: originalAmount === "" ? null : originalAmount,
+        refundAmount: refundAmount === "" ? null : refundAmount,
+        orderGroup,
+        notes,
+        status,
+      },
+      { new: true, runValidators: true },
+    );
+
+    if (!order) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Order not found" });
+    }
+
+    res.json({ success: true, data: order });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// DELETE order
+exports.deleteOrder = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const order = await Order.findByIdAndDelete(id);
+
+    if (!order) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Order not found" });
+    }
+
+    res.json({ success: true, message: "Order deleted" });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};

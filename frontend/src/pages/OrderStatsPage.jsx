@@ -50,6 +50,7 @@ export default function OrderStatsPage() {
   });
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
+  const [loadingOrders, setLoadingOrders] = useState(true);
   const [success, setSuccess] = useState(false);
   const [orders, setOrders] = useState([]);
   const [groupFilter, setGroupFilter] = useState("all");
@@ -60,11 +61,14 @@ export default function OrderStatsPage() {
   const [editingId, setEditingId] = useState(null);
 
   const fetchOrders = async () => {
+    setLoadingOrders(true);
     try {
       const res = await api.get("/orders", { params: { sort: "desc" } });
       setOrders(res.data.data || []);
     } catch (err) {
       console.error("Failed to fetch orders", err);
+    } finally {
+      setLoadingOrders(false);
     }
   };
 
@@ -76,7 +80,6 @@ export default function OrderStatsPage() {
     const e = {};
     if (!form.orderId.trim()) e.orderId = "Order ID is required";
     if (!form.orderDate) e.orderDate = "Order date is required";
-    if (!form.refundDate) e.refundDate = "Refund date is required";
     return e;
   };
 
@@ -116,6 +119,7 @@ export default function OrderStatsPage() {
       refresh();
       fetchOrders();
       setEditingId(null);
+      setShowForm(false);
       setTimeout(() => setSuccess(false), 2400);
     } catch (err) {
       setErrors({
@@ -611,10 +615,22 @@ export default function OrderStatsPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredOrders.length === 0 ? (
+                {loadingOrders ? (
                   <tr>
                     <td
-                      colSpan="9"
+                      colSpan="10"
+                      className="px-3 py-10 text-center text-gray-400"
+                    >
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="h-10 w-10 rounded-full border-2 border-accent border-t-transparent animate-spin" />
+                        <span>Loading order data...</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : filteredOrders.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan="10"
                       className="px-3 py-10 text-center text-gray-400"
                     >
                       No orders found.
