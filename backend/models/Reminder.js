@@ -21,6 +21,11 @@ const reminderSchema = new mongoose.Schema(
       trim: true,
       default: "",
     },
+    productName: {
+      type: String,
+      trim: true,
+      default: "",
+    },
     reviewDate: {
       type: Date,
       default: null,
@@ -40,6 +45,11 @@ const reminderSchema = new mongoose.Schema(
       min: 0,
     },
     less: {
+      type: Number,
+      default: null,
+      min: 0,
+    },
+    deduction: {
       type: Number,
       default: null,
       min: 0,
@@ -71,8 +81,19 @@ const reminderSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-// Auto-compute status before save
+// Auto-compute status and less before save
 reminderSchema.pre("save", function (next) {
+  // Auto-calculate less = originalAmount - refundAmount
+  if (
+    this.originalAmount != null &&
+    this.refundAmount != null &&
+    !isNaN(this.originalAmount) &&
+    !isNaN(this.refundAmount)
+  ) {
+    this.less = Number(this.originalAmount) - Number(this.refundAmount);
+    if (this.less < 0) this.less = 0;
+  }
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const targetDate = this.type === "review" ? this.reviewDate : this.refundDate;

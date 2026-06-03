@@ -14,9 +14,9 @@ function reminderTitle(type) {
   return "Refund";
 }
 
-function calculateRefundAmount(originalAmount, less) {
+function calculateRefundAmount(originalAmount, deduction) {
   if (originalAmount === "") return "";
-  return (Number(originalAmount) - Number(less || 0)).toFixed(2);
+  return (Number(originalAmount) - Number(deduction || 0)).toFixed(2);
 }
 
 export default function EditReminderPage() {
@@ -42,11 +42,12 @@ export default function EditReminderPage() {
           orderDate: formatDateInput(r.orderDate),
           amazonLink: r.amazonLink || "",
           productImage: r.productImage || "",
+          productName: r.productName || "",
           reviewDate: formatDateInput(r.reviewDate),
           refundDate: formatDateInput(r.refundDate),
           contactPerson: r.contactPerson || "",
           originalAmount: r.originalAmount ?? "",
-          less: r.less ?? "",
+          deduction: r.deduction ?? r.less ?? "",
           refundAmount: r.refundAmount ?? "",
           orderGroup: r.orderGroup || "",
           status: r.status || "upcoming",
@@ -61,10 +62,10 @@ export default function EditReminderPage() {
     const { name, value } = e.target;
     setForm((prev) => {
       const updated = { ...prev, [name]: value };
-      if (name === "originalAmount" || name === "less") {
+      if (name === "originalAmount" || name === "deduction") {
         updated.refundAmount = calculateRefundAmount(
           updated.originalAmount,
-          updated.less,
+          updated.deduction,
         );
       }
       return updated;
@@ -150,6 +151,9 @@ export default function EditReminderPage() {
         <p className="text-muted text-sm font-mono">
           Order #{reminder.orderId}
         </p>
+        {reminder.productName && (
+          <p className="text-muted text-sm font-mono">{reminder.productName}</p>
+        )}
       </div>
 
       {success && (
@@ -316,11 +320,11 @@ export default function EditReminderPage() {
                   />
                 </div>
                 <div>
-                  <label className="label">Less</label>
+                  <label className="label">Deduction/Adjustment</label>
                   <input
                     type="number"
-                    name="less"
-                    value={form.less}
+                    name="deduction"
+                    value={form.deduction}
                     onChange={handleChange}
                     min="0"
                     step="0.01"

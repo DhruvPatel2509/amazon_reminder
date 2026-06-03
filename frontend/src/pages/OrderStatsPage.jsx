@@ -47,18 +47,20 @@ function whatsappMessageLink(reminder) {
   const number = whatsappNumber(reminder.contactPerson);
   if (!number) return "";
 
+  const productName = reminder.productName || "-";
+  const deduction = reminder.deduction ?? reminder.less;
   const original =
     reminder.originalAmount == null || reminder.originalAmount === ""
       ? "-"
-      : formatAmount(reminder.originalAmount);
+      : `Rs. ${Number(reminder.originalAmount).toFixed(2)}`;
   const less =
-    reminder.less == null || reminder.less === ""
+    deduction == null || deduction === ""
       ? "-"
-      : formatAmount(reminder.less);
+      : `Rs. ${Number(deduction).toFixed(2)}`;
   const refundAmt =
     reminder.refundAmount == null || reminder.refundAmount === ""
       ? "-"
-      : formatAmount(reminder.refundAmount);
+      : `Rs. ${Number(reminder.refundAmount).toFixed(2)}`;
   const refundFormDate = reminder.reviewDate
     ? formatDate(reminder.reviewDate)
     : "-";
@@ -68,22 +70,17 @@ function whatsappMessageLink(reminder) {
 
   const message = [
     "Refund Inquiry",
-    "",
     "Hello,",
     "",
     "Mera refund abhi tak credit nahi hua hai. Please status check karein:",
     "",
-    `Order ID: ${reminder.orderId || "-"}`,
-    "",
+    `Order ID:- ${reminder.orderId || "-"}`,
+    `ProductName:- ${productName}`,
     `Original Amount:- ${original}`,
-    "",
     `Less:- ${less}`,
-    "",
-    `Amount: ${refundAmt}`,
-    "",
+    `Refund Amount:- ${refundAmt}`,
     `Refund Form Fill Date:- ${refundFormDate}`,
-    "",
-    `Expected Date: ${expectedDate}`,
+    `Expected Date:- ${expectedDate}`,
     "",
     "Thank you!",
   ].join("\n");
@@ -923,6 +920,11 @@ export default function OrderStatsPage() {
                         </td>
                         <td className="px-3 py-3 font-medium text-white">
                           #{item.orderId}
+                          {item.productName && (
+                            <div className="text-xs text-gray-400">
+                              {item.productName}
+                            </div>
+                          )}
                         </td>
                         <td className="px-3 py-3">
                           {item.orderGroup || "Unassigned"}
@@ -934,9 +936,7 @@ export default function OrderStatsPage() {
                           {refundFormDate ? formatDate(refundFormDate) : "-"}
                         </td>
                         <td className="px-3 py-3">
-                          {refundDate
-                            ? formatDate(refundDate)
-                            : "-"}
+                          {refundDate ? formatDate(refundDate) : "-"}
                         </td>
                         <td className="px-3 py-3">
                           {daysBetweenDates(refundFormDate, refundDate)}

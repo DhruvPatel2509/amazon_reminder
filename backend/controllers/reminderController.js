@@ -1,7 +1,7 @@
 const Reminder = require("../models/Reminder");
 
 async function getProductImage(amazonLink) {
-  if (!amazonLink || !amazonLink.includes("amazon")) return "";
+  if (!amazonLink || !/(amazon|flipkart)/i.test(amazonLink)) return "";
 
   try {
     const response = await fetch(amazonLink, {
@@ -27,6 +27,59 @@ async function getProductImage(amazonLink) {
       html.match(/data-a-dynamic-image=["']\{&quot;([^&]+)&quot;/i);
 
     return match?.[1]?.replace(/\\\//g, "/").replace(/&amp;/g, "&") || "";
+  } catch (err) {
+    return "";
+  }
+}
+
+function cleanProductTitle(title) {
+  if (!title || typeof title !== "string") return "";
+  let normalized = title.trim();
+
+  // Remove site-specific suffixes and separators
+  normalized = normalized.replace(/\s*[|–—-]\s*.*$/g, "").trim();
+  normalized = normalized.replace(/\s*\([^)]*\)\s*$/g, "").trim();
+
+  // Remove common prefixes/trailing vendor phrases
+  normalized = normalized.replace(/^(?:Amazon\.in:\s*)?(?:Buy\s+)/i, "").trim();
+  normalized = normalized
+    .replace(/(?:\s+Buy|\s+Online|\s+Online Shopping|\s+Online at.*)$/i, "")
+    .trim();
+  normalized = normalized
+    .replace(
+      /(?:\s+at\s+Amazon.*|\s+on\s+Amazon.*|\s+at\s+Flipkart.*|\s+on\s+Flipkart.*)$/i,
+      "",
+    )
+    .trim();
+
+  return normalized;
+}
+
+async function getProductName(amazonLink) {
+  if (!amazonLink || !/(amazon|flipkart)/i.test(amazonLink)) return "";
+
+  try {
+    const response = await fetch(amazonLink, {
+      headers: {
+        "user-agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36",
+        accept: "text/html,application/xhtml+xml",
+      },
+    });
+
+    if (!response.ok) return "";
+    const html = await response.text();
+    const titleMatch =
+      html.match(
+        /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i,
+      ) ||
+      html.match(
+        /<meta[^>]+name=["']og:title["'][^>]+content=["']([^"']+)["']/i,
+      ) ||
+      html.match(/<title>([^<]+)<\/title>/i);
+
+    if (!titleMatch) return "";
+    return cleanProductTitle(titleMatch[1]);
   } catch (err) {
     return "";
   }
@@ -88,12 +141,24 @@ exports.getAllReminders = async (req, res) => {
           }
         }
       }
-      if (r.amazonLink && !r.productImage) {
-        const productImage = await getProductImage(r.amazonLink);
-        if (productImage) {
-          r.productImage = productImage;
-          await r.save();
+
+      if (r.amazonLink && (!r.productImage || !r.productName)) {
+        let shouldSave = false;
+        if (!r.productImage) {
+          const productImage = await getProductImage(r.amazonLink);
+          if (productImage) {
+            r.productImage = productImage;
+            shouldSave = true;
+          }
         }
+        if (!r.productName) {
+          const productName = await getProductName(r.amazonLink);
+          if (productName) {
+            r.productName = productName;
+            shouldSave = true;
+          }
+        }
+        if (shouldSave) await r.save();
       }
     }
 
@@ -232,6 +297,11 @@ exports.createRefundFormReminder = async (req, res) => {
       orderGroup,
       notes,
       productImage,
+      productName,
+      originalAmount,
+      deduction,
+      less,
+      refundAmount,
     } = req.body;
 
     if (!orderId || !orderDate || !refundDate) {
@@ -241,13 +311,29 @@ exports.createRefundFormReminder = async (req, res) => {
       });
     }
 
+    const deductionAmount = deduction !== undefined ? deduction : less;
+    const computedRefundAmount =
+      refundAmount !== undefined && refundAmount !== ""
+        ? Number(refundAmount)
+        : calculateRefundAmount(originalAmount, deductionAmount);
+
+    const finalProductName =
+      productName || (await getProductName(amazonLink)) || "";
+
     const reminder = new Reminder({
       orderId,
       orderDate,
       amazonLink,
       orderGroup,
       productImage: productImage || (await getProductImage(amazonLink)),
+      productName: finalProductName,
       refundDate,
+      originalAmount: originalAmount === "" ? null : originalAmount,
+      less: less === "" ? null : less,
+      deduction: deductionAmount === "" ? null : deductionAmount,
+      refundAmount: Number.isNaN(computedRefundAmount)
+        ? null
+        : computedRefundAmount,
       notes,
       type: "refundForm",
     });
@@ -271,10 +357,12 @@ exports.createRefundReminder = async (req, res) => {
       contactPerson,
       originalAmount,
       less,
+      deduction,
       refundAmount,
       orderGroup,
       notes,
       productImage,
+      productName,
     } = req.body;
 
     if (!orderId || !orderDate || !refundDate) {
@@ -284,21 +372,27 @@ exports.createRefundReminder = async (req, res) => {
       });
     }
 
+    const deductionAmount = deduction !== undefined ? deduction : less;
     const computedRefundAmount =
       refundAmount !== undefined && refundAmount !== ""
         ? Number(refundAmount)
-        : calculateRefundAmount(originalAmount, less);
+        : calculateRefundAmount(originalAmount, deductionAmount);
+
+    const finalProductName =
+      productName || (await getProductName(amazonLink)) || "";
 
     const reminder = new Reminder({
       orderId,
       orderDate,
       amazonLink,
       productImage: productImage || (await getProductImage(amazonLink)),
+      productName: finalProductName,
       reviewDate,
       refundDate,
       contactPerson,
       originalAmount: originalAmount === "" ? null : originalAmount,
       less: less === "" ? null : less,
+      deduction: deductionAmount === "" ? null : deductionAmount,
       refundAmount: Number.isNaN(computedRefundAmount)
         ? null
         : computedRefundAmount,
@@ -328,11 +422,13 @@ exports.updateReminder = async (req, res) => {
       "orderDate",
       "amazonLink",
       "productImage",
+      "productName",
       "reviewDate",
       "refundDate",
       "contactPerson",
       "originalAmount",
       "less",
+      "deduction",
       "refundAmount",
       "orderGroup",
       "status",
@@ -346,16 +442,22 @@ exports.updateReminder = async (req, res) => {
       reminder.contactPerson = "";
       reminder.originalAmount = null;
       reminder.less = null;
+      reminder.deduction = null;
       reminder.refundAmount = null;
     }
     if (reminder.type === "refund") {
+      const deductionAmount =
+        reminder.deduction !== null ? reminder.deduction : reminder.less;
       reminder.refundAmount = calculateRefundAmount(
         reminder.originalAmount,
-        reminder.less,
+        deductionAmount,
       );
     }
     if (req.body.amazonLink && !req.body.productImage) {
       reminder.productImage = await getProductImage(req.body.amazonLink);
+    }
+    if (req.body.amazonLink && !req.body.productName) {
+      reminder.productName = await getProductName(req.body.amazonLink);
     }
 
     await reminder.save();

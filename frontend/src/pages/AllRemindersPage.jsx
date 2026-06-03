@@ -73,7 +73,10 @@ function orderToFutureReminders(order) {
     orderDate: order.orderDate,
     amazonLink: order.amazonLink,
     productImage: order.productImage,
+    productName: order.productName,
     originalAmount: order.originalAmount,
+    deduction: order.deduction,
+    less: order.less,
     refundAmount: order.refundAmount,
     contactPerson: order.contactPerson,
     notes: order.notes,
@@ -104,7 +107,8 @@ function orderToFutureReminders(order) {
   ];
 
   return items.filter(
-    (item) => item.status !== "completed" && isFutureReminderDate(getTargetDate(item)),
+    (item) =>
+      item.status !== "completed" && isFutureReminderDate(getTargetDate(item)),
   );
 }
 
@@ -117,18 +121,20 @@ function whatsappLink(reminder) {
   const rawNumber = String(reminder.contactPerson || "").replace(/\D/g, "");
   const number = rawNumber.length === 10 ? `91${rawNumber}` : rawNumber;
   if (number.length < 11) return "";
+  const productName = reminder.productName || "-";
+  const deduction = reminder.deduction ?? reminder.less;
   const original =
     reminder.originalAmount == null || reminder.originalAmount === ""
       ? "-"
-      : formatAmount(reminder.originalAmount);
+      : `Rs. ${Number(reminder.originalAmount).toFixed(2)}`;
   const less =
-    reminder.less == null || reminder.less === ""
+    deduction == null || deduction === ""
       ? "-"
-      : formatAmount(reminder.less);
+      : `Rs. ${Number(deduction).toFixed(2)}`;
   const refundAmt =
     reminder.refundAmount == null || reminder.refundAmount === ""
       ? "-"
-      : formatAmount(reminder.refundAmount) || "-";
+      : `Rs. ${Number(reminder.refundAmount).toFixed(2)}`;
   const refundFormDate = reminder.reviewDate
     ? formatDate(reminder.reviewDate)
     : "-";
@@ -137,22 +143,17 @@ function whatsappLink(reminder) {
     : "-";
   const message = [
     "Refund Inquiry",
-    "",
     "Hello,",
     "",
     "Mera refund abhi tak credit nahi hua hai. Please status check karein:",
     "",
-    `Order ID: ${reminder.orderId || "-"}`,
-    "",
+    `Order ID:- ${reminder.orderId || "-"}`,
+    `ProductName:- ${productName}`,
     `Original Amount:- ${original}`,
-    "",
     `Less:- ${less}`,
-    "",
-    `Amount: Rs. ${refundAmt}`,
-    "",
+    `Refund Amount:- ${refundAmt}`,
     `Refund Form Fill Date:- ${refundFormDate}`,
-    "",
-    `Expected Date: ${expectedDate}`,
+    `Expected Date:- ${expectedDate}`,
     "",
     "Thank you!",
   ].join("\n");
@@ -174,10 +175,17 @@ function TodayTaskItem({ reminder }) {
         <p className="mt-1 break-all text-sm text-white">
           Order #{reminder.orderId}
         </p>
+        {reminder.productName && (
+          <p className="text-xs text-gray-300">{reminder.productName}</p>
+        )}
       </div>
       <div className="flex flex-wrap gap-2">
         <Link
-          to={reminder.source === "order" ? "/order-stats" : `/edit/${reminder._id}`}
+          to={
+            reminder.source === "order"
+              ? "/order-stats"
+              : `/edit/${reminder._id}`
+          }
           className="w-fit rounded-md border border-border bg-card px-3 py-2 text-xs font-display font-semibold text-gray-100 hover:border-accent/50"
         >
           {reminder.source === "order" ? "Open Order" : "Open Task"}
@@ -229,10 +237,9 @@ function ReminderListItem({ reminder }) {
               <p className="break-all font-display text-sm font-semibold text-white">
                 #{reminder.orderId}
               </p>
-              <div className="mt-2 flex items-center gap-3">
-                <DateBadge date={getTargetDate(reminder)} />
-                <p className="text-xs text-gray-300">{config.dateLabel}</p>
-              </div>
+              {reminder.productName && (
+                <p className="text-xs text-gray-300">{reminder.productName}</p>
+              )}
             </div>
 
             <span
@@ -244,7 +251,11 @@ function ReminderListItem({ reminder }) {
 
           <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
             <Link
-              to={reminder.source === "order" ? "/order-stats" : `/edit/${reminder._id}`}
+              to={
+                reminder.source === "order"
+                  ? "/order-stats"
+                  : `/edit/${reminder._id}`
+              }
               className="rounded-md border border-border px-2 py-1 font-display text-gray-200 hover:border-accent/50 hover:text-white"
             >
               {reminder.source === "order" ? "Open Order" : "Edit"}

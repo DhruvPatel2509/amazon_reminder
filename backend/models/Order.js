@@ -7,10 +7,12 @@ const orderSchema = new mongoose.Schema(
     reviewDate: { type: Date, default: null },
     amazonLink: { type: String, trim: true, default: "" },
     productImage: { type: String, trim: true, default: "" },
+    productName: { type: String, trim: true, default: "" },
     refundFormDate: { type: Date, default: null },
     refundDate: { type: Date, default: null },
     contactPerson: { type: String, trim: true, default: "" },
     originalAmount: { type: Number, default: null, min: 0 },
+    less: { type: Number, default: null, min: 0 },
     refundAmount: { type: Number, default: null, min: 0 },
     refundStatus: {
       type: String,
@@ -27,5 +29,20 @@ const orderSchema = new mongoose.Schema(
   },
   { timestamps: true },
 );
+
+// Auto-compute less field before save
+orderSchema.pre("save", function (next) {
+  // Auto-calculate less = originalAmount - refundAmount
+  if (
+    this.originalAmount != null &&
+    this.refundAmount != null &&
+    !isNaN(this.originalAmount) &&
+    !isNaN(this.refundAmount)
+  ) {
+    this.less = Number(this.originalAmount) - Number(this.refundAmount);
+    if (this.less < 0) this.less = 0;
+  }
+  next();
+});
 
 module.exports = mongoose.model("Order", orderSchema);

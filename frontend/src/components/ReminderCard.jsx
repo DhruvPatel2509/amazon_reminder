@@ -86,18 +86,20 @@ function whatsappNumber(number) {
 function whatsappLink(reminder) {
   const number = whatsappNumber(reminder.contactPerson);
   if (!number) return "";
+  const productName = reminder.productName || "-";
+  const deduction = reminder.deduction ?? reminder.less;
   const original =
     reminder.originalAmount == null || reminder.originalAmount === ""
       ? "-"
-      : formatAmount(reminder.originalAmount);
+      : `Rs. ${Number(reminder.originalAmount).toFixed(2)}`;
   const less =
-    reminder.less == null || reminder.less === ""
+    deduction == null || deduction === ""
       ? "-"
-      : formatAmount(reminder.less);
+      : `Rs. ${Number(deduction).toFixed(2)}`;
   const refundAmt =
     reminder.refundAmount == null || reminder.refundAmount === ""
       ? "-"
-      : formatAmount(reminder.refundAmount);
+      : `Rs. ${Number(reminder.refundAmount).toFixed(2)}`;
   const refundFormDate = reminder.reviewDate
     ? formatDate(reminder.reviewDate)
     : "-";
@@ -106,22 +108,17 @@ function whatsappLink(reminder) {
     : "-";
   const message = [
     "Refund Inquiry",
-    "",
     "Hello,",
     "",
     "Mera refund abhi tak credit nahi hua hai. Please status check karein:",
     "",
-    `Order ID: ${reminder.orderId || "-"}`,
-    "",
+    `Order ID:- ${reminder.orderId || "-"}`,
+    `ProductName:- ${productName}`,
     `Original Amount:- ${original}`,
-    "",
     `Less:- ${less}`,
-    "",
-    `Amount: ${refundAmt}`,
-    "",
+    `Refund Amount:- ${refundAmt}`,
     `Refund Form Fill Date:- ${refundFormDate}`,
-    "",
-    `Expected Date: ${expectedDate}`,
+    `Expected Date:- ${expectedDate}`,
     "",
     "Thank you!",
   ].join("\n");
@@ -297,6 +294,11 @@ export default function ReminderCard({ orderGroup, onDelete, onStatusChange }) {
               <h3 className="mt-1 break-all font-display text-2xl font-bold text-white">
                 #{primary.orderId}
               </h3>
+              {primary.productName && (
+                <p className="mt-1 text-sm text-gray-300">
+                  {primary.productName}
+                </p>
+              )}
             </div>
             <div className="w-fit rounded-lg border border-border bg-surface px-3 py-2 text-sm text-gray-200">
               {reminders.length}/3 parts filled

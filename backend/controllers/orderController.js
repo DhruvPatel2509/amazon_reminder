@@ -34,6 +34,56 @@ async function getProductImage(link) {
   }
 }
 
+function cleanProductTitle(title) {
+  if (!title || typeof title !== "string") return "";
+  let normalized = title.trim();
+
+  normalized = normalized.replace(/\s*[|–—-]\s*.*$/g, "").trim();
+  normalized = normalized.replace(/\s*\([^)]*\)\s*$/g, "").trim();
+  normalized = normalized.replace(/^(?:Amazon\.in:\s*)?(?:Buy\s+)/i, "").trim();
+  normalized = normalized
+    .replace(/(?:\s+Buy|\s+Online|\s+Online Shopping|\s+Online at.*)$/i, "")
+    .trim();
+  normalized = normalized
+    .replace(
+      /(?:\s+at\s+Amazon.*|\s+on\s+Amazon.*|\s+at\s+Flipkart.*|\s+on\s+Flipkart.*)$/i,
+      "",
+    )
+    .trim();
+
+  return normalized;
+}
+
+async function getProductName(link) {
+  if (!link || !/(amazon|flipkart)/i.test(link)) return "";
+
+  try {
+    const response = await fetch(link, {
+      headers: {
+        "user-agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36",
+        accept: "text/html,application/xhtml+xml",
+      },
+    });
+
+    if (!response.ok) return "";
+    const html = await response.text();
+    const titleMatch =
+      html.match(
+        /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i,
+      ) ||
+      html.match(
+        /<meta[^>]+name=["']og:title["'][^>]+content=["']([^"']+)["']/i,
+      ) ||
+      html.match(/<title>([^<]+)<\/title>/i);
+
+    if (!titleMatch) return "";
+    return cleanProductTitle(titleMatch[1]);
+  } catch (err) {
+    return "";
+  }
+}
+
 function blankContactQuery(group) {
   return {
     orderGroup: group,
@@ -94,15 +144,24 @@ exports.getAllOrders = async (req, res) => {
     await syncAllGroupContactPersons();
     const all = await Order.find(query).sort(sortOption);
 
-    // Auto-fill productImage if missing (try extract from amazonLink)
+    // Auto-fill productImage and productName if missing (try extract from amazonLink)
     for (const o of all) {
+      let shouldSave = false;
       if (o.amazonLink && !o.productImage) {
         const productImage = await getProductImage(o.amazonLink);
         if (productImage) {
           o.productImage = productImage;
-          await o.save();
+          shouldSave = true;
         }
       }
+      if (o.amazonLink && !o.productName) {
+        const productName = await getProductName(o.amazonLink);
+        if (productName) {
+          o.productName = productName;
+          shouldSave = true;
+        }
+      }
+      if (shouldSave) await o.save();
     }
 
     const updated = await Order.find(query).sort(sortOption);
@@ -129,6 +188,7 @@ exports.createOrder = async (req, res) => {
       orderGroup,
       notes,
       productImage,
+      productName,
     } = req.body;
     if (!orderId || !orderDate) {
       return res.status(400).json({
@@ -138,6 +198,7 @@ exports.createOrder = async (req, res) => {
     }
 
     const finalImage = productImage || (await getProductImage(amazonLink));
+    const finalName = productName || (await getProductName(amazonLink)) || "";
     const resolvedContactPerson =
       contactPerson || (await getGroupContactPerson(orderGroup));
 
@@ -147,6 +208,7 @@ exports.createOrder = async (req, res) => {
       reviewDate: reviewDate || null,
       amazonLink,
       productImage: finalImage,
+      productName: finalName,
       refundFormDate: refundFormDate || null,
       refundDate,
       originalAmount: originalAmount === "" ? null : originalAmount,
@@ -182,6 +244,7 @@ exports.updateOrder = async (req, res) => {
       orderGroup,
       notes,
       productImage,
+      productName,
       status,
     } = req.body;
 
@@ -193,6 +256,7 @@ exports.updateOrder = async (req, res) => {
     }
 
     const finalImage = productImage || (await getProductImage(amazonLink));
+    const finalName = productName || (await getProductName(amazonLink)) || "";
     const resolvedContactPerson =
       contactPerson || (await getGroupContactPerson(orderGroup));
 
@@ -204,6 +268,7 @@ exports.updateOrder = async (req, res) => {
         reviewDate: reviewDate || null,
         amazonLink,
         productImage: finalImage,
+        productName: finalName,
         refundFormDate: refundFormDate || null,
         refundDate,
         originalAmount: originalAmount === "" ? null : originalAmount,

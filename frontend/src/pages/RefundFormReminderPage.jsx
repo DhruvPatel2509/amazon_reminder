@@ -1,18 +1,22 @@
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import api from '../api';
-import { useNotifications } from '../context/NotificationContext';
+import { useState } from "react";
+import { useNavigate, Link } from "react-router-dom";
+import api from "../api";
+import { useNotifications } from "../context/NotificationContext";
 
 export default function RefundFormReminderPage() {
   const navigate = useNavigate();
   const { refresh } = useNotifications();
   const [form, setForm] = useState({
-    orderId: '',
-    orderDate: '',
-    amazonLink: '',
-    productImage: '',
-    refundDate: '',
-    notes: '',
+    orderId: "",
+    orderDate: "",
+    amazonLink: "",
+    productImage: "",
+    productName: "",
+    originalAmount: "",
+    deduction: "",
+    refundAmount: "",
+    refundDate: "",
+    notes: "",
   });
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
@@ -20,16 +24,27 @@ export default function RefundFormReminderPage() {
 
   const validate = () => {
     const e = {};
-    if (!form.orderId.trim()) e.orderId = 'Order ID is required';
-    if (!form.orderDate) e.orderDate = 'Order date is required';
-    if (!form.refundDate) e.refundDate = 'Refund form date is required';
+    if (!form.orderId.trim()) e.orderId = "Order ID is required";
+    if (!form.orderDate) e.orderDate = "Order date is required";
+    if (!form.refundDate) e.refundDate = "Refund form date is required";
     return e;
   };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
-    if (errors[name]) setErrors((prev) => ({ ...prev, [name]: '' }));
+    setForm((prev) => {
+      const updated = { ...prev, [name]: value };
+      if (name === "originalAmount" || name === "deduction") {
+        const original = Number(updated.originalAmount);
+        const deductionAmount = Number(updated.deduction || 0);
+        updated.refundAmount =
+          updated.originalAmount === ""
+            ? ""
+            : (original - deductionAmount).toFixed(2);
+      }
+      return updated;
+    });
+    if (errors[name]) setErrors((prev) => ({ ...prev, [name]: "" }));
   };
 
   const handleSubmit = async (e) => {
@@ -42,12 +57,14 @@ export default function RefundFormReminderPage() {
 
     setLoading(true);
     try {
-      await api.post('/reminders/refund-form', form);
+      await api.post("/reminders/refund-form", form);
       setSuccess(true);
       refresh();
-      setTimeout(() => navigate('/'), 1500);
+      setTimeout(() => navigate("/"), 1500);
     } catch (err) {
-      setErrors({ general: err.response?.data?.message || 'Failed to create reminder' });
+      setErrors({
+        general: err.response?.data?.message || "Failed to create reminder",
+      });
     } finally {
       setLoading(false);
     }
@@ -56,31 +73,70 @@ export default function RefundFormReminderPage() {
   return (
     <div className="max-w-xl mx-auto animate-fade-in">
       <div className="mb-8">
-        <Link to="/" className="text-gray-300 hover:text-white text-sm flex items-center gap-1 mb-4 transition-colors w-fit">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+        <Link
+          to="/"
+          className="text-gray-300 hover:text-white text-sm flex items-center gap-1 mb-4 transition-colors w-fit"
+        >
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M15 19l-7-7 7-7"
+            />
           </svg>
           Back to Dashboard
         </Link>
         <div className="flex items-center gap-3 mb-2">
           <div className="w-10 h-10 bg-cyan-500/15 border border-cyan-500/30 rounded-xl flex items-center justify-center">
-            <svg className="w-5 h-5 text-cyan-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6M7 4h7l3 3v13H7V4z" />
+            <svg
+              className="w-5 h-5 text-cyan-300"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 12h6m-6 4h6M7 4h7l3 3v13H7V4z"
+              />
             </svg>
           </div>
           <div>
-            <h1 className="font-display font-bold text-2xl text-white">Refund Form Reminder</h1>
-            <p className="text-gray-300 text-sm">Fill this part manually for the order.</p>
+            <h1 className="font-display font-bold text-2xl text-white">
+              Refund Form Reminder
+            </h1>
+            <p className="text-gray-300 text-sm">
+              Fill this part manually for the order.
+            </p>
           </div>
         </div>
       </div>
 
       {success && (
         <div className="mb-6 rounded-xl border border-green-800/50 bg-green-900/20 p-4 flex items-center gap-3">
-          <svg className="w-5 h-5 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          <svg
+            className="w-5 h-5 text-success"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
           </svg>
-          <p className="text-green-300 text-sm">Refund form reminder created.</p>
+          <p className="text-green-300 text-sm">
+            Refund form reminder created.
+          </p>
         </div>
       )}
 
@@ -93,57 +149,168 @@ export default function RefundFormReminderPage() {
       <form onSubmit={handleSubmit} className="card space-y-5">
         <div>
           <label className="label">Order ID *</label>
-          <input type="text" name="orderId" value={form.orderId} onChange={handleChange}
+          <input
+            type="text"
+            name="orderId"
+            value={form.orderId}
+            onChange={handleChange}
             placeholder="e.g. 402-1234567-8901234"
-            className={`input-field ${errors.orderId ? 'border-danger' : ''}`} />
-          {errors.orderId && <p className="text-danger text-xs mt-1">{errors.orderId}</p>}
+            className={`input-field ${errors.orderId ? "border-danger" : ""}`}
+          />
+          {errors.orderId && (
+            <p className="text-danger text-xs mt-1">{errors.orderId}</p>
+          )}
         </div>
 
         <div>
           <label className="label">Order Date *</label>
-          <input type="date" name="orderDate" value={form.orderDate} onChange={handleChange}
-            className={`input-field ${errors.orderDate ? 'border-danger' : ''}`} />
-          {errors.orderDate && <p className="text-danger text-xs mt-1">{errors.orderDate}</p>}
+          <input
+            type="date"
+            name="orderDate"
+            value={form.orderDate}
+            onChange={handleChange}
+            className={`input-field ${errors.orderDate ? "border-danger" : ""}`}
+          />
+          {errors.orderDate && (
+            <p className="text-danger text-xs mt-1">{errors.orderDate}</p>
+          )}
         </div>
 
         <div>
           <label className="label">Amazon Product Link</label>
-          <input type="url" name="amazonLink" value={form.amazonLink} onChange={handleChange}
-            placeholder="https://www.amazon.in/..." className="input-field" />
+          <input
+            type="url"
+            name="amazonLink"
+            value={form.amazonLink}
+            onChange={handleChange}
+            placeholder="https://www.amazon.in/..."
+            className="input-field"
+          />
         </div>
 
         <div>
           <label className="label">Product Image URL</label>
-          <input type="url" name="productImage" value={form.productImage} onChange={handleChange}
-            placeholder="Optional if Amazon image is not detected" className="input-field" />
+          <input
+            type="url"
+            name="productImage"
+            value={form.productImage}
+            onChange={handleChange}
+            placeholder="Optional if Amazon image is not detected"
+            className="input-field"
+          />
+        </div>
+
+        <div>
+          <label className="label">Product Name</label>
+          <input
+            type="text"
+            name="productName"
+            value={form.productName}
+            onChange={handleChange}
+            placeholder="e.g. Samsung Galaxy S21"
+            className="input-field"
+          />
+        </div>
+
+        <div>
+          <label className="label">Original Amount</label>
+          <input
+            type="number"
+            name="originalAmount"
+            value={form.originalAmount}
+            onChange={handleChange}
+            min="0"
+            step="0.01"
+            placeholder="0.00"
+            className="input-field"
+          />
+        </div>
+
+        <div>
+          <label className="label">Deduction/Adjustment</label>
+          <input
+            type="number"
+            name="deduction"
+            value={form.deduction}
+            onChange={handleChange}
+            min="0"
+            step="0.01"
+            placeholder="0.00"
+            className="input-field"
+          />
+        </div>
+
+        <div>
+          <label className="label">Refund Amount</label>
+          <input
+            type="number"
+            name="refundAmount"
+            value={form.refundAmount}
+            placeholder="Calculated automatically"
+            className="input-field"
+            readOnly
+          />
         </div>
 
         <div>
           <label className="label">Refund Form Date *</label>
-          <input type="date" name="refundDate" value={form.refundDate} onChange={handleChange}
-            className={`input-field ${errors.refundDate ? 'border-danger' : ''}`} />
-          {errors.refundDate && <p className="text-danger text-xs mt-1">{errors.refundDate}</p>}
+          <input
+            type="date"
+            name="refundDate"
+            value={form.refundDate}
+            onChange={handleChange}
+            className={`input-field ${errors.refundDate ? "border-danger" : ""}`}
+          />
+          {errors.refundDate && (
+            <p className="text-danger text-xs mt-1">{errors.refundDate}</p>
+          )}
         </div>
 
         <div>
           <label className="label">Notes</label>
-          <textarea name="notes" value={form.notes} onChange={handleChange} rows={3}
+          <textarea
+            name="notes"
+            value={form.notes}
+            onChange={handleChange}
+            rows={3}
             placeholder="Refund form details..."
-            className="input-field resize-none" />
+            className="input-field resize-none"
+          />
         </div>
 
         <div className="flex gap-3 pt-2">
-          <button type="submit" disabled={loading}
-            className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
+          <button
+            type="submit"
+            disabled={loading}
+            className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
             {loading ? (
-              <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Creating...</>
+              <>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Creating...
+              </>
             ) : (
-              <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>Create Reminder</>
+              <>
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 4v16m8-8H4"
+                  />
+                </svg>
+                Create Reminder
+              </>
             )}
           </button>
-          <Link to="/" className="btn-secondary">Cancel</Link>
+          <Link to="/" className="btn-secondary">
+            Cancel
+          </Link>
         </div>
       </form>
     </div>

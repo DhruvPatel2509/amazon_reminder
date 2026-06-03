@@ -11,11 +11,12 @@ export default function RefundReminderPage() {
     orderDate: "",
     amazonLink: "",
     productImage: "",
+    productName: "",
     reviewDate: "",
     refundDate: "",
     contactPerson: "",
     originalAmount: "",
-    less: "",
+    deduction: "",
     refundAmount: "",
     orderGroup: "",
     notes: "",
@@ -36,13 +37,13 @@ export default function RefundReminderPage() {
     const { name, value } = e.target;
     setForm((prev) => {
       const updated = { ...prev, [name]: value };
-      if (name === "originalAmount" || name === "less") {
+      if (name === "originalAmount" || name === "deduction") {
         const original = Number(updated.originalAmount);
-        const deduction = Number(updated.less || 0);
+        const deductionAmount = Number(updated.deduction || 0);
         updated.refundAmount =
           updated.originalAmount === ""
             ? ""
-            : (original - deduction).toFixed(2);
+            : (original - deductionAmount).toFixed(2);
       }
       return updated;
     });
@@ -205,6 +206,19 @@ export default function RefundReminderPage() {
           />
         </div>
 
+        {/* Product Name */}
+        <div>
+          <label className="label">Product Name</label>
+          <input
+            type="text"
+            name="productName"
+            value={form.productName}
+            onChange={handleChange}
+            placeholder="e.g. Samsung Galaxy S21"
+            className="input-field"
+          />
+        </div>
+
         {/* Refund Form Fill Date */}
         <div>
           <label className="label">Refund Form Fill Date</label>
@@ -275,11 +289,11 @@ export default function RefundReminderPage() {
         </div>
 
         <div>
-          <label className="label">Less</label>
+          <label className="label">Deduction/Adjustment</label>
           <input
             type="number"
-            name="less"
-            value={form.less}
+            name="deduction"
+            value={form.deduction}
             onChange={handleChange}
             min="0"
             step="0.01"

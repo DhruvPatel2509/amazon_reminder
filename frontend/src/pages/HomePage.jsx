@@ -1,12 +1,14 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
-import api from '../api';
-import ReminderCard from '../components/ReminderCard';
+import { useState, useEffect, useCallback } from "react";
+import { Link } from "react-router-dom";
+import api from "../api";
+import ReminderCard from "../components/ReminderCard";
 
 function StatCard({ label, value, color }) {
   return (
     <div className="card">
-      <p className="text-xs font-display uppercase tracking-widest text-muted mb-2">{label}</p>
+      <p className="text-xs font-display uppercase tracking-widest text-muted mb-2">
+        {label}
+      </p>
       <p className={`text-3xl font-display font-bold ${color}`}>{value}</p>
     </div>
   );
@@ -43,81 +45,86 @@ function isFutureReminderDate(date) {
 
 function orderToFutureReminders(order) {
   const base = {
-    source: 'order',
+    source: "order",
     orderId: order.orderId,
     orderDate: order.orderDate,
     amazonLink: order.amazonLink,
     productImage: order.productImage,
+    productName: order.productName,
     originalAmount: order.originalAmount,
+    deduction: order.deduction,
+    less: order.less,
     refundAmount: order.refundAmount,
     contactPerson: order.contactPerson,
     notes: order.notes,
-    status: 'upcoming',
+    status: "upcoming",
   };
   const items = [
     {
       ...base,
       _id: `${order._id}-review`,
-      type: 'review',
+      type: "review",
       reviewDate: order.reviewDate,
     },
     {
       ...base,
       _id: `${order._id}-refundForm`,
-      type: 'refundForm',
+      type: "refundForm",
       refundFormDate: order.refundFormDate,
       refundDate: order.refundFormDate,
     },
     {
       ...base,
       _id: `${order._id}-refund`,
-      type: 'refund',
+      type: "refund",
       reviewDate: order.refundFormDate,
       refundDate: order.refundDate,
-      status: order.refundStatus === 'credited' ? 'completed' : 'upcoming',
+      status: order.refundStatus === "credited" ? "completed" : "upcoming",
     },
   ];
 
   return items.filter((item) => {
     const date =
-      item.type === 'review'
+      item.type === "review"
         ? item.reviewDate
-        : item.type === 'refundForm'
+        : item.type === "refundForm"
           ? item.refundFormDate
           : item.refundDate;
-    return item.status !== 'completed' && isFutureReminderDate(date);
+    return item.status !== "completed" && isFutureReminderDate(date);
   });
 }
 
 export default function HomePage() {
   const [reminders, setReminders] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [typeFilter, setTypeFilter] = useState('all');
-  const [sort, setSort] = useState('desc');
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [sort, setSort] = useState("desc");
 
   const fetchReminders = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.get('/orders', { params: { sort } });
+      const res = await api.get("/orders", { params: { sort } });
       let items = (res.data.data || []).flatMap(orderToFutureReminders);
 
       if (search) {
         const query = search.toLowerCase();
         items = items.filter((item) =>
-          String(item.orderId || '').toLowerCase().includes(query),
+          String(item.orderId || "")
+            .toLowerCase()
+            .includes(query),
         );
       }
-      if (statusFilter !== 'all') {
+      if (statusFilter !== "all") {
         items = items.filter((item) => item.status === statusFilter);
       }
-      if (typeFilter !== 'all') {
+      if (typeFilter !== "all") {
         items = items.filter((item) => item.type === typeFilter);
       }
       setReminders(items);
     } catch (err) {
-      console.error('Failed to fetch reminders', err);
+      console.error("Failed to fetch reminders", err);
     } finally {
       setLoading(false);
     }
@@ -134,16 +141,16 @@ export default function HomePage() {
 
   const handleStatusChange = (id, newStatus) => {
     setReminders((prev) =>
-      prev.map((r) => (r._id === id ? { ...r, status: newStatus } : r))
+      prev.map((r) => (r._id === id ? { ...r, status: newStatus } : r)),
     );
   };
 
   // Stats
   const stats = {
     total: reminders.length,
-    upcoming: reminders.filter((r) => r.status === 'upcoming').length,
-    overdue: reminders.filter((r) => r.status === 'overdue').length,
-    completed: reminders.filter((r) => r.status === 'completed').length,
+    upcoming: reminders.filter((r) => r.status === "upcoming").length,
+    overdue: reminders.filter((r) => r.status === "overdue").length,
+    completed: reminders.filter((r) => r.status === "completed").length,
   };
   const orderGroups = groupByOrder(reminders);
 
@@ -151,16 +158,28 @@ export default function HomePage() {
     <div className="animate-fade-in">
       {/* Page Header */}
       <div className="mb-8">
-        <h1 className="font-display font-bold text-3xl text-white mb-1">Order Dashboard</h1>
-        <p className="text-gray-300 font-body text-sm">One box per order ID with review, refund form, and refund reminders.</p>
+        <h1 className="font-display font-bold text-3xl text-white mb-1">
+          Order Dashboard
+        </h1>
+        <p className="text-gray-300 font-body text-sm">
+          One box per order ID with review, refund form, and refund reminders.
+        </p>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
         <StatCard label="Total Parts" value={stats.total} color="text-white" />
-        <StatCard label="Upcoming" value={stats.upcoming} color="text-warning" />
+        <StatCard
+          label="Upcoming"
+          value={stats.upcoming}
+          color="text-warning"
+        />
         <StatCard label="Overdue" value={stats.overdue} color="text-danger" />
-        <StatCard label="Completed" value={stats.completed} color="text-success" />
+        <StatCard
+          label="Completed"
+          value={stats.completed}
+          color="text-success"
+        />
       </div>
 
       {/* Filters & Search */}
@@ -173,7 +192,12 @@ export default function HomePage() {
             stroke="currentColor"
             viewBox="0 0 24 24"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+            />
           </svg>
           <input
             type="text"
@@ -230,19 +254,44 @@ export default function HomePage() {
       ) : orderGroups.length === 0 ? (
         <div className="text-center py-20">
           <div className="w-16 h-16 bg-card rounded-2xl flex items-center justify-center mx-auto mb-4 border border-border">
-            <svg className="w-8 h-8 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+            <svg
+              className="w-8 h-8 text-muted"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+              />
             </svg>
           </div>
-          <h3 className="font-display font-semibold text-white text-lg mb-2">No reminders found</h3>
+          <h3 className="font-display font-semibold text-white text-lg mb-2">
+            No reminders found
+          </h3>
           <p className="text-muted text-sm mb-6">
-            {search || statusFilter !== 'all' || typeFilter !== 'all'
-              ? 'Try adjusting your filters'
-              : 'Add future dates in order stats to show reminders here'}
+            {search || statusFilter !== "all" || typeFilter !== "all"
+              ? "Try adjusting your filters"
+              : "Add future dates in order stats to show reminders here"}
           </p>
-          <Link to="/order-stats" className="btn-primary inline-flex items-center gap-2">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          <Link
+            to="/order-stats"
+            className="btn-primary inline-flex items-center gap-2"
+          >
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 4v16m8-8H4"
+              />
             </svg>
             Open Order Stats
           </Link>
