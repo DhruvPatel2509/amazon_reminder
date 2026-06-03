@@ -57,6 +57,15 @@ function isToday(date) {
   );
 }
 
+function daysLeft(date) {
+  if (!date) return null;
+  const target = new Date(date);
+  const today = new Date();
+  target.setHours(0, 0, 0, 0);
+  today.setHours(0, 0, 0, 0);
+  return Math.ceil((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+}
+
 function isFutureReminderDate(date) {
   if (!date) return false;
   const target = new Date(date);
@@ -207,10 +216,15 @@ function TodayTaskItem({ reminder }) {
 
 function ReminderListItem({ reminder }) {
   const config = typeConfig[reminder.type] || typeConfig.review;
+  const remainingDays = daysLeft(getTargetDate(reminder));
+  const statusLabel =
+    reminder.status === "upcoming" && remainingDays !== null
+      ? `${remainingDays} day${remainingDays === 1 ? "" : "s"} left`
+      : reminder.status;
   const statusClass =
     reminder.status === "completed"
       ? "border-green-800/50 bg-green-900/20 text-green-200"
-      : reminder.status === "overdue"
+      : reminder.status === "overdue" || remainingDays === 0
         ? "border-red-800/50 bg-red-900/20 text-red-200"
         : "border-yellow-800/50 bg-yellow-900/20 text-yellow-200";
 
@@ -245,7 +259,7 @@ function ReminderListItem({ reminder }) {
             <span
               className={`rounded-full border px-2 py-1 text-[11px] font-display font-semibold uppercase ${statusClass}`}
             >
-              {reminder.status}
+              {statusLabel}
             </span>
           </div>
 
