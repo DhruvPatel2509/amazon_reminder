@@ -9,6 +9,16 @@ const orderSchema = new mongoose.Schema(
     productImage: { type: String, trim: true, default: "" },
     productName: { type: String, trim: true, default: "" },
     refundFormDate: { type: Date, default: null },
+    reviewStatus: {
+      type: String,
+      enum: ["upcoming", "completed"],
+      default: "upcoming",
+    },
+    refundFormStatus: {
+      type: String,
+      enum: ["upcoming", "completed"],
+      default: "upcoming",
+    },
     refundDate: { type: Date, default: null },
     contactPerson: { type: String, trim: true, default: "" },
     originalAmount: { type: Number, default: null, min: 0 },

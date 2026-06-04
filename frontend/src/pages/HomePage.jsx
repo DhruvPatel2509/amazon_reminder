@@ -65,6 +65,7 @@ function orderToFutureReminders(order) {
       _id: `${order._id}-review`,
       type: "review",
       reviewDate: order.reviewDate,
+      status: order.reviewStatus === "completed" ? "completed" : "upcoming",
     },
     {
       ...base,
@@ -72,6 +73,7 @@ function orderToFutureReminders(order) {
       type: "refundForm",
       refundFormDate: order.refundFormDate,
       refundDate: order.refundFormDate,
+      status: order.refundFormStatus === "completed" ? "completed" : "upcoming",
     },
     {
       ...base,

@@ -4,6 +4,7 @@ const ctrl = require("../controllers/orderController");
 
 router.get("/", ctrl.getAllOrders);
 router.post("/", ctrl.createOrder);
+router.put("/:id/reminders/:type/status", ctrl.updateOrderReminderStatus);
 router.put("/:id", ctrl.updateOrder);
 router.delete("/:id", ctrl.deleteOrder);
 

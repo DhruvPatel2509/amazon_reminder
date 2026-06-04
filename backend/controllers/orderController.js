@@ -180,6 +180,8 @@ exports.createOrder = async (req, res) => {
       reviewDate,
       amazonLink,
       refundFormDate,
+      reviewStatus,
+      refundFormStatus,
       refundDate,
       originalAmount,
       refundAmount,
@@ -210,6 +212,8 @@ exports.createOrder = async (req, res) => {
       productImage: finalImage,
       productName: finalName,
       refundFormDate: refundFormDate || null,
+      reviewStatus: reviewStatus || "upcoming",
+      refundFormStatus: refundFormStatus || "upcoming",
       refundDate,
       originalAmount: originalAmount === "" ? null : originalAmount,
       refundAmount: refundAmount === "" ? null : refundAmount,
@@ -236,6 +240,8 @@ exports.updateOrder = async (req, res) => {
       reviewDate,
       amazonLink,
       refundFormDate,
+      reviewStatus,
+      refundFormStatus,
       refundDate,
       originalAmount,
       refundAmount,
@@ -259,6 +265,10 @@ exports.updateOrder = async (req, res) => {
     const finalName = productName || (await getProductName(amazonLink)) || "";
     const resolvedContactPerson =
       contactPerson || (await getGroupContactPerson(orderGroup));
+    const reminderStatusUpdates = {};
+    if (reviewStatus !== undefined) reminderStatusUpdates.reviewStatus = reviewStatus;
+    if (refundFormStatus !== undefined)
+      reminderStatusUpdates.refundFormStatus = refundFormStatus;
 
     const order = await Order.findByIdAndUpdate(
       id,
@@ -278,6 +288,7 @@ exports.updateOrder = async (req, res) => {
         orderGroup,
         notes,
         status,
+        ...reminderStatusUpdates,
       },
       { new: true, runValidators: true },
     );
@@ -289,6 +300,48 @@ exports.updateOrder = async (req, res) => {
     }
 
     await syncGroupContactPerson(orderGroup, resolvedContactPerson);
+    res.json({ success: true, data: order });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// PUT complete/update a single reminder part on an order
+exports.updateOrderReminderStatus = async (req, res) => {
+  try {
+    const { id, type } = req.params;
+    const { status = "completed" } = req.body;
+
+    if (status !== "completed") {
+      return res.status(400).json({
+        success: false,
+        message: "Only completed status is supported from this action",
+      });
+    }
+
+    const update = {};
+    if (type === "review") update.reviewStatus = "completed";
+    else if (type === "refundForm") update.refundFormStatus = "completed";
+    else if (type === "refund") {
+      update.refundStatus = "credited";
+      update.status = "refunded";
+    } else {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid reminder type" });
+    }
+
+    const order = await Order.findByIdAndUpdate(id, update, {
+      new: true,
+      runValidators: true,
+    });
+
+    if (!order) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Order not found" });
+    }
+
     res.json({ success: true, data: order });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });

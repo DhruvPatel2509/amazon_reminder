@@ -46,17 +46,6 @@ function getTargetDate(reminder) {
   return reminder.refundDate;
 }
 
-function isToday(date) {
-  if (!date) return false;
-  const target = new Date(date);
-  const today = new Date();
-  return (
-    target.getDate() === today.getDate() &&
-    target.getMonth() === today.getMonth() &&
-    target.getFullYear() === today.getFullYear()
-  );
-}
-
 function daysLeft(date) {
   if (!date) return null;
   const target = new Date(date);
@@ -66,18 +55,26 @@ function daysLeft(date) {
   return Math.ceil((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-function isFutureReminderDate(date) {
+function isDueReminderDate(date) {
   if (!date) return false;
   const target = new Date(date);
   const today = new Date();
   target.setHours(0, 0, 0, 0);
   today.setHours(0, 0, 0, 0);
-  return target >= today;
+  return target <= today;
 }
 
-function orderToFutureReminders(order) {
+function getReminderStatus(date, savedStatus = "upcoming") {
+  if (savedStatus === "completed") return "completed";
+  const remainingDays = daysLeft(date);
+  if (remainingDays === null) return "upcoming";
+  return remainingDays < 0 ? "overdue" : "upcoming";
+}
+
+function orderToReminders(order) {
   const base = {
     source: "order",
+    orderDbId: order._id,
     orderId: order.orderId,
     orderDate: order.orderDate,
     amazonLink: order.amazonLink,
@@ -97,6 +94,7 @@ function orderToFutureReminders(order) {
       _id: `${order._id}-review`,
       type: "review",
       reviewDate: order.reviewDate,
+      status: getReminderStatus(order.reviewDate, order.reviewStatus),
     },
     {
       ...base,
@@ -104,6 +102,7 @@ function orderToFutureReminders(order) {
       type: "refundForm",
       refundFormDate: order.refundFormDate,
       refundDate: order.refundFormDate,
+      status: getReminderStatus(order.refundFormDate, order.refundFormStatus),
     },
     {
       ...base,
@@ -111,14 +110,14 @@ function orderToFutureReminders(order) {
       type: "refund",
       reviewDate: order.refundFormDate,
       refundDate: order.refundDate,
-      status: order.refundStatus === "credited" ? "completed" : "upcoming",
+      status: getReminderStatus(
+        order.refundDate,
+        order.refundStatus === "credited" ? "completed" : "upcoming",
+      ),
     },
   ];
 
-  return items.filter(
-    (item) =>
-      item.status !== "completed" && isFutureReminderDate(getTargetDate(item)),
-  );
+  return items.filter((item) => getTargetDate(item));
 }
 
 function formatAmount(amount) {
@@ -169,9 +168,11 @@ function whatsappLink(reminder) {
   return `https://wa.me/${number}?text=${encodeURIComponent(message)}`;
 }
 
-function TodayTaskItem({ reminder }) {
+function TodayTaskItem({ reminder, onComplete, completingId }) {
   const config = typeConfig[reminder.type] || typeConfig.review;
   const messageLink = reminder.type === "refund" ? whatsappLink(reminder) : "";
+  const canComplete =
+    reminder.status !== "completed" && isDueReminderDate(getTargetDate(reminder));
 
   return (
     <div
@@ -209,17 +210,29 @@ function TodayTaskItem({ reminder }) {
             Send Message
           </a>
         )}
+        {canComplete && (
+          <button
+            type="button"
+            onClick={() => onComplete(reminder)}
+            disabled={completingId === reminder._id}
+            className="w-fit rounded-md border border-green-700/60 bg-green-900/30 px-3 py-2 text-xs font-display font-semibold text-green-200 hover:bg-green-800/50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {completingId === reminder._id ? "Saving..." : "Complete"}
+          </button>
+        )}
       </div>
     </div>
   );
 }
 
-function ReminderListItem({ reminder }) {
+function ReminderListItem({ reminder, onComplete, completingId }) {
   const config = typeConfig[reminder.type] || typeConfig.review;
   const remainingDays = daysLeft(getTargetDate(reminder));
   const statusLabel =
     reminder.status === "upcoming" && remainingDays !== null
       ? `${remainingDays} day${remainingDays === 1 ? "" : "s"} left`
+      : reminder.status === "overdue" && remainingDays !== null
+        ? `Overdue by ${Math.abs(remainingDays)} day${Math.abs(remainingDays) === 1 ? "" : "s"}`
       : reminder.status;
   const statusClass =
     reminder.status === "completed"
@@ -227,6 +240,8 @@ function ReminderListItem({ reminder }) {
       : reminder.status === "overdue" || remainingDays === 0
         ? "border-red-800/50 bg-red-900/20 text-red-200"
         : "border-yellow-800/50 bg-yellow-900/20 text-yellow-200";
+  const canComplete =
+    reminder.status !== "completed" && isDueReminderDate(getTargetDate(reminder));
 
   return (
     <div className="rounded-lg border border-border bg-surface/70 p-3">
@@ -284,6 +299,16 @@ function ReminderListItem({ reminder }) {
                 Amazon
               </a>
             )}
+            {canComplete && (
+              <button
+                type="button"
+                onClick={() => onComplete(reminder)}
+                disabled={completingId === reminder._id}
+                className="rounded-md border border-green-700/60 bg-green-900/30 px-2 py-1 font-display text-green-200 hover:bg-green-800/50 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {completingId === reminder._id ? "Saving..." : "Complete"}
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -331,12 +356,13 @@ export default function AllRemindersPage() {
   const [reminders, setReminders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("left");
+  const [completingId, setCompletingId] = useState("");
 
   const fetchReminders = useCallback(async () => {
     setLoading(true);
     try {
       const res = await api.get("/orders", { params: { sort: "desc" } });
-      const items = (res.data.data || []).flatMap(orderToFutureReminders);
+      const items = (res.data.data || []).flatMap(orderToReminders);
       // Sort reminders by nearest target date (earliest first). Null/empty dates go last.
       items.sort((a, b) => {
         const da = getTargetDate(a)
@@ -359,11 +385,32 @@ export default function AllRemindersPage() {
     fetchReminders();
   }, [fetchReminders]);
 
+  const handleComplete = async (reminder) => {
+    setCompletingId(reminder._id);
+    try {
+      await api.put(
+        `/orders/${reminder.orderDbId}/reminders/${reminder.type}/status`,
+        { status: "completed" },
+      );
+      setReminders((prev) =>
+        prev.map((item) =>
+          item._id === reminder._id ? { ...item, status: "completed" } : item,
+        ),
+      );
+    } catch (err) {
+      console.error("Failed to complete reminder", err);
+      alert("Failed to complete reminder");
+    } finally {
+      setCompletingId("");
+    }
+  };
+
   const todayTasks = useMemo(
     () =>
       reminders.filter(
         (reminder) =>
-          reminder.status !== "completed" && isToday(getTargetDate(reminder)),
+          reminder.status !== "completed" &&
+          isDueReminderDate(getTargetDate(reminder)),
       ),
     [reminders],
   );
@@ -417,10 +464,10 @@ export default function AllRemindersPage() {
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="font-display text-xl font-bold text-white">
-                Today's Work
+                Due Work
               </h2>
               <p className="mt-1 text-sm text-gray-300">
-                {formatDate(new Date())} ko due pending tasks.
+                {formatDate(new Date())} tak due pending tasks.
               </p>
             </div>
             <span className="rounded-full border border-orange-500/30 bg-orange-500/10 px-3 py-1 text-sm font-display font-semibold text-orange-200">
@@ -430,12 +477,17 @@ export default function AllRemindersPage() {
 
           {todayTasks.length === 0 ? (
             <div className="rounded-lg border border-dashed border-border bg-surface/40 p-4 text-sm text-gray-300">
-              Aaj review, refund form ya refund ka koi pending kaam nahi hai.
+              Review, refund form ya refund ka koi due pending kaam nahi hai.
             </div>
           ) : (
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {todayTasks.map((reminder) => (
-                <TodayTaskItem key={reminder._id} reminder={reminder} />
+                <TodayTaskItem
+                  key={reminder._id}
+                  reminder={reminder}
+                  onComplete={handleComplete}
+                  completingId={completingId}
+                />
               ))}
             </div>
           )}
@@ -485,6 +537,8 @@ export default function AllRemindersPage() {
                       <ReminderListItem
                         key={reminder._id}
                         reminder={reminder}
+                        onComplete={handleComplete}
+                        completingId={completingId}
                       />
                     ))}
                   </div>
