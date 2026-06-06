@@ -18,6 +18,15 @@ function formatDate(value) {
   return new Date(value).toLocaleDateString("en-IN");
 }
 
+function formatWhatsappDate(value) {
+  if (!value) return "-";
+  return new Date(value).toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 function daysRemaining(dateStr) {
   if (!dateStr) return null;
   const today = new Date();
@@ -34,6 +43,16 @@ function daysBetweenDates(startDate, endDate) {
   start.setHours(0, 0, 0, 0);
   end.setHours(0, 0, 0, 0);
   const days = Math.round((end - start) / (1000 * 60 * 60 * 24));
+  return `${days} days`;
+}
+
+function daysFromDate(startDate) {
+  if (!startDate) return "-";
+  const start = new Date(startDate);
+  const today = new Date();
+  start.setHours(0, 0, 0, 0);
+  today.setHours(0, 0, 0, 0);
+  const days = Math.round((today - start) / (1000 * 60 * 60 * 24));
   return `${days} days`;
 }
 
@@ -61,17 +80,18 @@ function whatsappMessageLink(reminder) {
     reminder.refundAmount == null || reminder.refundAmount === ""
       ? "-"
       : `Rs. ${Number(reminder.refundAmount).toFixed(2)}`;
-  const refundFormDate = reminder.reviewDate
-    ? formatDate(reminder.reviewDate)
+  const refundFormValue = reminder.reviewDate || reminder.refundFormDate;
+  const refundFormDate = refundFormValue
+    ? formatWhatsappDate(refundFormValue)
     : "-";
   const expectedDate = reminder.refundDate
-    ? formatDate(reminder.refundDate)
+    ? formatWhatsappDate(reminder.refundDate)
     : "-";
+  const refundDays = daysFromDate(refundFormValue);
 
   const message = [
     "Refund Inquiry",
     "Hello,",
-    "",
     "Mera refund abhi tak credit nahi hua hai. Please status check karein:",
     "",
     `Order ID:- ${reminder.orderId || "-"}`,
@@ -81,8 +101,11 @@ function whatsappMessageLink(reminder) {
     `Refund Amount:- ${refundAmt}`,
     `Refund Form Fill Date:- ${refundFormDate}`,
     `Expected Date:- ${expectedDate}`,
+    `Days: ${refundDays} from refund form`,
     "",
-    "Thank you!",
+    "Kindly confirm refund ka current status aur credit kab tak hoga.",
+    "",
+    "Thank you.",
   ].join("\n");
 
   return `https://wa.me/${number}?text=${encodeURIComponent(message)}`;

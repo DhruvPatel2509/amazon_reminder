@@ -125,6 +125,26 @@ function formatAmount(amount) {
   return `Rs. ${Number(amount).toFixed(2)}`;
 }
 
+function daysBetweenDates(startDate, endDate) {
+  if (!startDate || !endDate) return "-";
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  start.setHours(0, 0, 0, 0);
+  end.setHours(0, 0, 0, 0);
+  const days = Math.round((end - start) / (1000 * 60 * 60 * 24));
+  return `${days} days`;
+}
+
+function daysFromDate(startDate) {
+  if (!startDate) return "-";
+  const start = new Date(startDate);
+  const today = new Date();
+  start.setHours(0, 0, 0, 0);
+  today.setHours(0, 0, 0, 0);
+  const days = Math.round((today - start) / (1000 * 60 * 60 * 24));
+  return `${days} days`;
+}
+
 function whatsappLink(reminder) {
   const rawNumber = String(reminder.contactPerson || "").replace(/\D/g, "");
   const number = rawNumber.length === 10 ? `91${rawNumber}` : rawNumber;
@@ -143,16 +163,17 @@ function whatsappLink(reminder) {
     reminder.refundAmount == null || reminder.refundAmount === ""
       ? "-"
       : `Rs. ${Number(reminder.refundAmount).toFixed(2)}`;
-  const refundFormDate = reminder.reviewDate
-    ? formatDate(reminder.reviewDate)
+  const refundFormValue = reminder.reviewDate || reminder.refundFormDate;
+  const refundFormDate = refundFormValue
+    ? formatDate(refundFormValue)
     : "-";
   const expectedDate = reminder.refundDate
     ? formatDate(reminder.refundDate)
     : "-";
+  const refundDays = daysFromDate(refundFormValue);
   const message = [
     "Refund Inquiry",
     "Hello,",
-    "",
     "Mera refund abhi tak credit nahi hua hai. Please status check karein:",
     "",
     `Order ID:- ${reminder.orderId || "-"}`,
@@ -162,8 +183,11 @@ function whatsappLink(reminder) {
     `Refund Amount:- ${refundAmt}`,
     `Refund Form Fill Date:- ${refundFormDate}`,
     `Expected Date:- ${expectedDate}`,
+    `Days: ${refundDays} from refund form`,
     "",
-    "Thank you!",
+    "Kindly confirm refund ka current status aur credit kab tak hoga.",
+    "",
+    "Thank you.",
   ].join("\n");
   return `https://wa.me/${number}?text=${encodeURIComponent(message)}`;
 }
