@@ -77,14 +77,15 @@ function formatAmount(amount) {
   return `Rs. ${Number(amount).toFixed(2)}`;
 }
 
-function daysBetweenDates(startDate, endDate) {
-  if (!startDate || !endDate) return "-";
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  start.setHours(0, 0, 0, 0);
-  end.setHours(0, 0, 0, 0);
-  const days = Math.round((end - start) / (1000 * 60 * 60 * 24));
-  return `${days} days`;
+function whatsappNumber(number) {
+  const digits = String(number || "").replace(/\D/g, "");
+  if (digits.length === 10) return `91${digits}`;
+  return digits.length >= 11 ? digits : "";
+}
+
+function whatsappChatLink(contactPerson) {
+  const number = whatsappNumber(contactPerson);
+  return number ? `https://wa.me/${number}` : "";
 }
 
 function daysFromDate(startDate) {
@@ -97,15 +98,9 @@ function daysFromDate(startDate) {
   return `${days} days`;
 }
 
-function whatsappNumber(number) {
-  const digits = String(number || "").replace(/\D/g, "");
-  if (digits.length === 10) return `91${digits}`;
-  return digits.length >= 11 ? digits : "";
-}
-
-function whatsappLink(reminder) {
-  const number = whatsappNumber(reminder.contactPerson);
-  if (!number) return "";
+function whatsappMessageLink(reminder) {
+  const chatLink = whatsappChatLink(reminder.contactPerson);
+  if (!chatLink) return "";
   const productName = reminder.productName || "-";
   const deduction = reminder.deduction ?? reminder.less;
   const original =
@@ -121,9 +116,7 @@ function whatsappLink(reminder) {
       ? "-"
       : `Rs. ${Number(reminder.refundAmount).toFixed(2)}`;
   const refundFormValue = reminder.reviewDate || reminder.refundFormDate;
-  const refundFormDate = refundFormValue
-    ? formatDate(refundFormValue)
-    : "-";
+  const refundFormDate = refundFormValue ? formatDate(refundFormValue) : "-";
   const expectedDate = reminder.refundDate
     ? formatDate(reminder.refundDate)
     : "-";
@@ -146,21 +139,24 @@ function whatsappLink(reminder) {
     "",
     "Thank you.",
   ].join("\n");
-  return `https://wa.me/${number}?text=${encodeURIComponent(message)}`;
+  return `${chatLink}?text=${encodeURIComponent(message)}`;
 }
 
 function ReminderRow({ reminder, onDelete, onStatusChange }) {
   const type = typeConfig[reminder.type] || typeConfig.review;
   const status = statusConfig[reminder.status] || statusConfig.upcoming;
+  const isOrderDerived = reminder.source === "order";
   const refundDaysRemaining =
     reminder.type === "refund" ? daysRemaining(reminder.refundDate) : null;
-  const isOrderDerived = reminder.source === "order";
-  const canSendRefundMessage =
+  const contactLink =
     reminder.type === "refund" &&
     reminder.status !== "completed" &&
     refundDaysRemaining !== null &&
-    refundDaysRemaining <= 0 &&
-    whatsappLink(reminder);
+    refundDaysRemaining <= 0
+      ? whatsappMessageLink(reminder)
+      : reminder.type !== "refund"
+        ? whatsappChatLink(reminder.contactPerson)
+        : "";
 
   const handleDelete = async () => {
     if (isOrderDerived) return;
@@ -251,14 +247,14 @@ function ReminderRow({ reminder, onDelete, onStatusChange }) {
             Complete
           </button>
         )}
-        {canSendRefundMessage && (
+        {contactLink && (
           <a
-            href={canSendRefundMessage}
+            href={contactLink}
             target="_blank"
             rel="noopener noreferrer"
             className="rounded-lg border border-green-700/60 bg-green-900/20 px-3 py-2 text-xs font-display font-medium text-green-300 hover:bg-green-900/40 hover:text-white"
           >
-            Send Message
+            {reminder.type === "refund" ? "Send Message" : "Contact"}
           </a>
         )}
         {!isOrderDerived && (

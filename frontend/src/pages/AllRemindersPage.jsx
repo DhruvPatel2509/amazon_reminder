@@ -120,19 +120,10 @@ function orderToReminders(order) {
   return items.filter((item) => getTargetDate(item));
 }
 
-function formatAmount(amount) {
-  if (amount === null || amount === undefined || amount === "") return "";
-  return `Rs. ${Number(amount).toFixed(2)}`;
-}
-
-function daysBetweenDates(startDate, endDate) {
-  if (!startDate || !endDate) return "-";
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  start.setHours(0, 0, 0, 0);
-  end.setHours(0, 0, 0, 0);
-  const days = Math.round((end - start) / (1000 * 60 * 60 * 24));
-  return `${days} days`;
+function whatsappChatLink(contactPerson) {
+  const digits = String(contactPerson || "").replace(/\D/g, "");
+  const number = digits.length === 10 ? `91${digits}` : digits;
+  return number.length >= 11 ? `https://wa.me/${number}` : "";
 }
 
 function daysFromDate(startDate) {
@@ -145,10 +136,9 @@ function daysFromDate(startDate) {
   return `${days} days`;
 }
 
-function whatsappLink(reminder) {
-  const rawNumber = String(reminder.contactPerson || "").replace(/\D/g, "");
-  const number = rawNumber.length === 10 ? `91${rawNumber}` : rawNumber;
-  if (number.length < 11) return "";
+function whatsappMessageLink(reminder) {
+  const chatLink = whatsappChatLink(reminder.contactPerson);
+  if (!chatLink) return "";
   const productName = reminder.productName || "-";
   const deduction = reminder.deduction ?? reminder.less;
   const original =
@@ -164,9 +154,7 @@ function whatsappLink(reminder) {
       ? "-"
       : `Rs. ${Number(reminder.refundAmount).toFixed(2)}`;
   const refundFormValue = reminder.reviewDate || reminder.refundFormDate;
-  const refundFormDate = refundFormValue
-    ? formatDate(refundFormValue)
-    : "-";
+  const refundFormDate = refundFormValue ? formatDate(refundFormValue) : "-";
   const expectedDate = reminder.refundDate
     ? formatDate(reminder.refundDate)
     : "-";
@@ -189,12 +177,15 @@ function whatsappLink(reminder) {
     "",
     "Thank you.",
   ].join("\n");
-  return `https://wa.me/${number}?text=${encodeURIComponent(message)}`;
+  return `${chatLink}?text=${encodeURIComponent(message)}`;
 }
 
 function TodayTaskItem({ reminder, onComplete, completingId }) {
   const config = typeConfig[reminder.type] || typeConfig.review;
-  const messageLink = reminder.type === "refund" ? whatsappLink(reminder) : "";
+  const contactLink =
+    reminder.type === "refund"
+      ? whatsappMessageLink(reminder)
+      : whatsappChatLink(reminder.contactPerson);
   const canComplete =
     reminder.status !== "completed" && isDueReminderDate(getTargetDate(reminder));
 
@@ -224,14 +215,14 @@ function TodayTaskItem({ reminder, onComplete, completingId }) {
         >
           {reminder.source === "order" ? "Open Order" : "Open Task"}
         </Link>
-        {messageLink && (
+        {contactLink && (
           <a
-            href={messageLink}
+            href={contactLink}
             target="_blank"
             rel="noopener noreferrer"
             className="w-fit rounded-md border border-green-700/60 bg-green-900/20 px-3 py-2 text-xs font-display font-semibold text-green-300 hover:bg-green-900/40 hover:text-white"
           >
-            Send Message
+            {reminder.type === "refund" ? "Send Message" : "Contact"}
           </a>
         )}
         {canComplete && (
@@ -251,6 +242,8 @@ function TodayTaskItem({ reminder, onComplete, completingId }) {
 
 function ReminderListItem({ reminder, onComplete, completingId }) {
   const config = typeConfig[reminder.type] || typeConfig.review;
+  const contactLink =
+    reminder.type !== "refund" ? whatsappChatLink(reminder.contactPerson) : "";
   const remainingDays = daysLeft(getTargetDate(reminder));
   const statusLabel =
     reminder.status === "upcoming" && remainingDays !== null
@@ -321,6 +314,16 @@ function ReminderListItem({ reminder, onComplete, completingId }) {
                 className="rounded-md border border-border px-2 py-1 font-display text-orange-200 hover:border-accent/50 hover:text-white"
               >
                 Amazon
+              </a>
+            )}
+            {contactLink && (
+              <a
+                href={contactLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-md border border-green-700/60 bg-green-900/20 px-2 py-1 font-display text-green-300 hover:bg-green-900/40 hover:text-white"
+              >
+                Contact
               </a>
             )}
             {canComplete && (

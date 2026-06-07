@@ -46,6 +46,17 @@ function daysBetweenDates(startDate, endDate) {
   return `${days} days`;
 }
 
+function whatsappNumber(number) {
+  const digits = String(number || "").replace(/\D/g, "");
+  if (digits.length === 10) return `91${digits}`;
+  return digits.length >= 11 ? digits : "";
+}
+
+function whatsappChatLink(contactPerson) {
+  const number = whatsappNumber(contactPerson);
+  return number ? `https://wa.me/${number}` : "";
+}
+
 function daysFromDate(startDate) {
   if (!startDate) return "-";
   const start = new Date(startDate);
@@ -56,15 +67,9 @@ function daysFromDate(startDate) {
   return `${days} days`;
 }
 
-function whatsappNumber(number) {
-  const digits = String(number || "").replace(/\D/g, "");
-  if (digits.length === 10) return `91${digits}`;
-  return digits.length >= 11 ? digits : "";
-}
-
 function whatsappMessageLink(reminder) {
-  const number = whatsappNumber(reminder.contactPerson);
-  if (!number) return "";
+  const chatLink = whatsappChatLink(reminder.contactPerson);
+  if (!chatLink) return "";
 
   const productName = reminder.productName || "-";
   const deduction = reminder.deduction ?? reminder.less;
@@ -108,7 +113,7 @@ function whatsappMessageLink(reminder) {
     "Thank you.",
   ].join("\n");
 
-  return `https://wa.me/${number}?text=${encodeURIComponent(message)}`;
+  return `${chatLink}?text=${encodeURIComponent(message)}`;
 }
 
 function sortReminders(reminders, sortBy, sortOrder) {
@@ -919,6 +924,7 @@ export default function OrderStatsPage() {
                         : "";
                     const showRefundMessage =
                       refundReminderLink &&
+                      refundReminder &&
                       refundReminder?.refundDate &&
                       daysRemaining(refundReminder?.refundDate) <= 0 &&
                       item.refundStatus !== "credited";
