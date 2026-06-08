@@ -191,9 +191,23 @@ function TodayTaskItem({ reminder, onComplete, completingId }) {
 
   return (
     <div
-      className={`flex flex-col gap-3 rounded-lg border ${config.border} ${config.bg} p-4 sm:flex-row sm:items-center sm:justify-between`}
+      className={`relative flex flex-col gap-3 rounded-lg border ${config.border} ${config.bg} p-3 pr-16`}
     >
-      <div>
+      <div className="absolute right-3 top-3 h-10 w-10 overflow-hidden rounded-md border border-white/10 bg-card">
+        {reminder.productImage ? (
+          <img
+            src={reminder.productImage}
+            alt=""
+            className="h-full w-full bg-white object-contain"
+          />
+        ) : (
+          <div className="flex h-full items-center justify-center px-1 text-center text-[9px] leading-tight text-gray-400">
+            No image
+          </div>
+        )}
+      </div>
+
+      <div className="min-w-0">
         <p className={`text-sm font-display font-semibold ${config.color}`}>
           {config.taskLabel}
         </p>
@@ -201,7 +215,9 @@ function TodayTaskItem({ reminder, onComplete, completingId }) {
           Order #{reminder.orderId}
         </p>
         {reminder.productName && (
-          <p className="text-xs text-gray-300">{reminder.productName}</p>
+          <p className="line-clamp-2 text-xs text-gray-300">
+            {reminder.productName}
+          </p>
         )}
       </div>
       <div className="flex flex-wrap gap-2">
@@ -442,6 +458,13 @@ export default function AllRemindersPage() {
     [reminders],
   );
 
+  const dueGroups = useMemo(() => {
+    return ["review", "refundForm", "refund"].map((type) => ({
+      type,
+      items: todayTasks.filter((reminder) => reminder.type === type),
+    }));
+  }, [todayTasks]);
+
   const grouped = useMemo(() => {
     return ["review", "refundForm", "refund"].map((type) => {
       const allItems = reminders.filter((reminder) => reminder.type === type);
@@ -507,15 +530,56 @@ export default function AllRemindersPage() {
               Review, refund form ya refund ka koi due pending kaam nahi hai.
             </div>
           ) : (
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {todayTasks.map((reminder) => (
-                <TodayTaskItem
-                  key={reminder._id}
-                  reminder={reminder}
-                  onComplete={handleComplete}
-                  completingId={completingId}
-                />
-              ))}
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+              {dueGroups.map((group) => {
+                const config = typeConfig[group.type];
+                return (
+                  <section
+                    key={group.type}
+                    className={`rounded-lg border ${config.border} bg-surface/50 p-3`}
+                  >
+                    <div className="mb-3 flex items-start justify-between gap-3">
+                      <div>
+                        <h3
+                          className={`font-display text-base font-bold ${config.color}`}
+                        >
+                          {config.title}
+                        </h3>
+                        <p className="mt-1 text-xs text-gray-300">
+                          {group.items.length} due
+                        </p>
+                      </div>
+                      <div
+                        className={`rounded-lg border ${config.border} ${config.bg} px-3 py-2 text-center`}
+                      >
+                        <p className="text-lg font-display font-bold text-white">
+                          {group.items.length}
+                        </p>
+                        <p className="text-[10px] uppercase tracking-wider text-gray-300">
+                          Due
+                        </p>
+                      </div>
+                    </div>
+
+                    {group.items.length === 0 ? (
+                      <div className="rounded-lg border border-dashed border-border bg-surface/40 p-3 text-sm text-gray-300">
+                        No due work.
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {group.items.map((reminder) => (
+                          <TodayTaskItem
+                            key={reminder._id}
+                            reminder={reminder}
+                            onComplete={handleComplete}
+                            completingId={completingId}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </section>
+                );
+              })}
             </div>
           )}
         </section>
