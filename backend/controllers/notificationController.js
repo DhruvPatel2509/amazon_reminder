@@ -1,5 +1,5 @@
 const crypto = require("crypto");
-const Reminder = require("../models/Reminder");
+const Order = require("../models/Order");
 const DailyNotification = require("../models/DailyNotification");
 const sendTelegramMessage = require("../utils/telegram");
 
@@ -29,8 +29,46 @@ function reminderTypeLabel(reminder) {
   return reminder.type === "review" ? "Review" : "Refund";
 }
 
+function getTargetDate(reminder) {
+  if (reminder.type === "review") return reminder.reviewDate;
+  if (reminder.type === "refundForm") {
+    return reminder.refundFormDate || reminder.refundDate;
+  }
+  return reminder.refundDate;
+}
+
+function orderToReminders(order) {
+  const base = {
+    amazonLink: order.amazonLink,
+    productName: order.productName,
+    contactPerson: order.contactPerson,
+  };
+
+  return [
+    {
+      ...base,
+      type: "review",
+      reviewDate: order.reviewDate,
+      completed: order.reviewStatus === "completed",
+    },
+    {
+      ...base,
+      type: "refundForm",
+      refundFormDate: order.refundFormDate,
+      refundDate: order.refundFormDate,
+      completed: order.refundFormStatus === "completed",
+    },
+    {
+      ...base,
+      type: "refund",
+      refundDate: order.refundDate,
+      completed: order.refundStatus === "credited",
+    },
+  ].filter((reminder) => getTargetDate(reminder));
+}
+
 function formatReminder(reminder, dateKey, overdue = false) {
-  const targetDate = reminder.type === "review" ? reminder.reviewDate : reminder.refundDate;
+  const targetDate = getTargetDate(reminder);
   const lines = [
     `• Product: ${reminder.productName || "Product name unavailable"}`,
   ];
@@ -95,15 +133,15 @@ exports.sendDailyReminder = async (req, res) => {
       return res.json({ success: true, message: "Daily reminder already sent", dateKey });
     }
 
-    const reminders = await Reminder.find({ status: { $ne: "completed" } });
+    const orders = await Order.find({});
+    const reminders = orders.flatMap(orderToReminders);
     const todayReminders = [];
     const overdueReminders = [];
 
     for (const reminder of reminders) {
-      const targetDate = reminder.type === "review" ? reminder.reviewDate : reminder.refundDate;
-      if (!targetDate) continue;
+      if (reminder.completed) continue;
 
-      const targetDateKey = getKolkataDateKey(targetDate);
+      const targetDateKey = getKolkataDateKey(getTargetDate(reminder));
       if (targetDateKey === dateKey) todayReminders.push(reminder);
       else if (targetDateKey < dateKey) overdueReminders.push(reminder);
     }
