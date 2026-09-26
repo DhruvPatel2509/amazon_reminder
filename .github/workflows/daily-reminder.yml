@@ -1,0 +1,18 @@
+name: Daily Amazon Reminder
+
+on:
+  schedule:
+    - cron: "30 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  send-daily-reminder:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send daily Telegram reminder
+        env:
+          REMINDER_API_URL: ${{ secrets.REMINDER_API_URL }}
+          REMINDER_CRON_SECRET: ${{ secrets.REMINDER_CRON_SECRET }}
+        run: |
+          curl --fail --silent --show-error --request POST "${REMINDER_API_URL%/}/api/notifications/daily-reminder" \
+            --header "Authorization: Bearer ${REMINDER_CRON_SECRET}"

@@ -6,6 +6,7 @@ require("dotenv").config();
 const reminderRoutes = require("./routes/reminderRoutes");
 const orderRoutes = require("./routes/orderRoutes");
 const telegramRoutes = require("./routes/telegramRoutes");
+const notificationRoutes = require("./routes/notificationRoutes");
 
 const app = express();
 
@@ -33,6 +34,7 @@ app.use(express.json());
 app.use("/api/reminders", reminderRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/telegram", telegramRoutes);
+app.use("/api/notifications", notificationRoutes);
 
 // Health check
 app.get("/api/health", (req, res) =>
