@@ -1,4 +1,4 @@
-const sendTelegramMessage = async (message) => {
+const sendTelegramMessage = async (message, options = {}) => {
   try {
     const token = process.env.TELEGRAM_BOT_TOKEN;
     const chatId = process.env.TELEGRAM_CHAT_ID;
@@ -17,6 +17,7 @@ const sendTelegramMessage = async (message) => {
         body: JSON.stringify({
           chat_id: chatId,
           text: message,
+          ...options,
         }),
       },
     );

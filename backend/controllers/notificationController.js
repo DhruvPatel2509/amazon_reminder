@@ -4,6 +4,8 @@ const DailyNotification = require("../models/DailyNotification");
 const sendTelegramMessage = require("../utils/telegram");
 
 const TIME_ZONE = "Asia/Kolkata";
+const SLOTS = { "08:00": "8:00 AM", "15:30": "3:30 PM", "21:00": "9:00 PM" };
+let notificationIndexSync;
 
 function getKolkataDateKey(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -15,7 +17,6 @@ function getKolkataDateKey(date = new Date()) {
   const values = Object.fromEntries(
     parts.filter((part) => part.type !== "literal").map((part) => [part.type, part.value]),
   );
-
   return `${values.year}-${values.month}-${values.day}`;
 }
 
@@ -25,15 +26,14 @@ function daysBetween(dateKey, targetDateKey) {
   return Math.round((date - target) / 86_400_000);
 }
 
-function reminderTypeLabel(reminder) {
-  return reminder.type === "review" ? "Review" : "Refund";
+function escapeHtml(value) {
+  const entities = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+  return String(value || "").replace(/[&<>"']/g, (character) => entities[character]);
 }
 
 function getTargetDate(reminder) {
   if (reminder.type === "review") return reminder.reviewDate;
-  if (reminder.type === "refundForm") {
-    return reminder.refundFormDate || reminder.refundDate;
-  }
+  if (reminder.type === "refundForm") return reminder.refundFormDate || reminder.refundDate;
   return reminder.refundDate;
 }
 
@@ -43,14 +43,8 @@ function orderToReminders(order) {
     productName: order.productName,
     contactPerson: order.contactPerson,
   };
-
   return [
-    {
-      ...base,
-      type: "review",
-      reviewDate: order.reviewDate,
-      completed: order.reviewStatus === "completed",
-    },
+    { ...base, type: "review", reviewDate: order.reviewDate, completed: order.reviewStatus === "completed" },
     {
       ...base,
       type: "refundForm",
@@ -58,120 +52,151 @@ function orderToReminders(order) {
       refundDate: order.refundFormDate,
       completed: order.refundFormStatus === "completed",
     },
-    {
-      ...base,
-      type: "refund",
-      refundDate: order.refundDate,
-      completed: order.refundStatus === "credited",
-    },
+    { ...base, type: "refund", refundDate: order.refundDate, completed: order.refundStatus === "credited" },
   ].filter((reminder) => getTargetDate(reminder));
 }
 
-function formatReminder(reminder, dateKey, overdue = false) {
-  const targetDate = getTargetDate(reminder);
-  const lines = [
-    `• Product: ${reminder.productName || "Product name unavailable"}`,
-  ];
-
+function formatReminder(reminder, dateKey, { overdue = false, includeContact = true } = {}) {
+  const lines = [`• ${escapeHtml(reminder.productName || "Product name unavailable")}`];
   if (overdue) {
-    const days = daysBetween(dateKey, getKolkataDateKey(targetDate));
-    lines.push(`${reminderTypeLabel(reminder)} overdue by ${days} day${days === 1 ? "" : "s"}`);
-  } else {
-    lines.push(`${reminderTypeLabel(reminder)}: Today`);
+    const days = daysBetween(dateKey, getKolkataDateKey(getTargetDate(reminder)));
+    lines.push(`⏰ ${days} day${days === 1 ? "" : "s"} overdue`);
   }
-
-  if (reminder.type !== "review" && reminder.contactPerson) {
-    lines.push(`Contact: ${reminder.contactPerson}`);
+  if (includeContact && reminder.type !== "review" && reminder.contactPerson) {
+    lines.push(`👤 ${escapeHtml(reminder.contactPerson)}`);
   }
-
-  lines.push(`Link: ${reminder.amazonLink || "Link unavailable"}`);
+  if (reminder.amazonLink) {
+    lines.push(`🔗 <a href="${escapeHtml(reminder.amazonLink)}">Open Product</a>`);
+  }
   return lines.join("\n");
 }
 
-function buildSummary(todayReminders, overdueReminders, dateKey) {
+function buildReminderSection(title, reminders, dateKey, options) {
+  if (!reminders.length) return "";
+  return `${title}\n${reminders.map((reminder) => formatReminder(reminder, dateKey, options)).join("\n\n")}`;
+}
+
+function buildMorningSummary(todayReminders, overdueReminders, dateKey) {
   const reviewToday = todayReminders.filter((reminder) => reminder.type === "review");
   const refundToday = todayReminders.filter((reminder) => reminder.type !== "review");
-  const sections = ["🔔 Today's Amazon Reminders"];
-
-  if (reviewToday.length) {
-    sections.push(`📝 REVIEW\n${reviewToday.map((reminder) => formatReminder(reminder, dateKey)).join("\n\n")}`);
-  }
-  if (refundToday.length) {
-    sections.push(`💰 REFUND\n${refundToday.map((reminder) => formatReminder(reminder, dateKey)).join("\n\n")}`);
-  }
-  if (overdueReminders.length) {
-    sections.push(`⚠️ OVERDUE\n${overdueReminders.map((reminder) => formatReminder(reminder, dateKey, true)).join("\n\n")}`);
-  }
-
+  const sections = ["🔔 Amazon Reminder | 8:00 AM", `📅 ${dateKey}`];
+  const reviewSection = buildReminderSection("📝 REVIEW TODAY", reviewToday, dateKey);
+  const refundSection = buildReminderSection("💰 REFUND TODAY", refundToday, dateKey);
+  const overdueSection = buildReminderSection("⚠️ OVERDUE", overdueReminders, dateKey, { overdue: true });
+  if (reviewSection) sections.push(reviewSection);
+  if (refundSection) sections.push(refundSection);
+  if (overdueSection) sections.push(overdueSection);
+  sections.push(`📌 TODAY: ${reviewToday.length} Reviews | ${refundToday.length} Refunds | ${overdueReminders.length} Overdue`);
   return sections.join("\n\n");
+}
+
+function buildAfternoonSummary(todayReminders, overdueReminders, completedToday, dateKey) {
+  const sections = ["🔔 Amazon Reminder | 3:30 PM", `📅 ${dateKey}`, "⏳ STILL PENDING"];
+  const reviewSection = buildReminderSection("📝 REVIEW", todayReminders.filter((reminder) => reminder.type === "review"), dateKey);
+  const refundSection = buildReminderSection("💰 REFUND", todayReminders.filter((reminder) => reminder.type !== "review"), dateKey);
+  const overdueSection = buildReminderSection("⚠️ OVERDUE", overdueReminders, dateKey, { overdue: true });
+  if (reviewSection) sections.push(reviewSection);
+  if (refundSection) sections.push(refundSection);
+  if (overdueSection) sections.push(overdueSection);
+  sections.push(`✅ Completed today: ${completedToday.length}\n⏳ Remaining: ${todayReminders.length + overdueReminders.length}`);
+  return sections.join("\n\n");
+}
+
+function productList(reminders) {
+  return reminders.map((reminder) => `• ${escapeHtml(reminder.productName || "Product name unavailable")}`).join("\n");
+}
+
+function buildFinalSummary(todayReminders, overdueReminders, completedToday, dateKey) {
+  if (!todayReminders.length && !overdueReminders.length) {
+    return ["🔔 Amazon Reminder | 9:00 PM", `📅 ${dateKey}`, "🎉 All Done!\nNo pending reminders for today."].join("\n\n");
+  }
+  const sections = ["🔔 Amazon Reminder | 9:00 PM", `📅 ${dateKey}`, "📊 TODAY'S FINAL STATUS"];
+  if (completedToday.length) sections.push(`✅ COMPLETED\n${productList(completedToday)}`);
+  if (todayReminders.length) sections.push(`⏳ STILL PENDING\n${productList(todayReminders)}`);
+  const overdueSection = buildReminderSection("⚠️ OVERDUE", overdueReminders, dateKey, { overdue: true, includeContact: false });
+  if (overdueSection) sections.push(overdueSection);
+  sections.push(`📌 Summary\n✅ Completed: ${completedToday.length}\n⏳ Pending: ${todayReminders.length}\n⚠️ Overdue: ${overdueReminders.length}`);
+  return sections.join("\n\n");
+}
+
+function buildSummary(slot, todayReminders, overdueReminders, completedToday, dateKey) {
+  if (slot === "08:00") return buildMorningSummary(todayReminders, overdueReminders, dateKey);
+  if (slot === "15:30") return buildAfternoonSummary(todayReminders, overdueReminders, completedToday, dateKey);
+  return buildFinalSummary(todayReminders, overdueReminders, completedToday, dateKey);
 }
 
 function isAuthorized(req) {
   const secret = process.env.REMINDER_CRON_SECRET;
   const authorization = req.get("authorization") || "";
-  const suppliedSecret = authorization.startsWith("Bearer ")
-    ? authorization.slice("Bearer ".length)
-    : "";
-
+  const suppliedSecret = authorization.startsWith("Bearer ") ? authorization.slice("Bearer ".length) : "";
   if (!secret || !suppliedSecret) return false;
-
   const expected = Buffer.from(secret);
   const received = Buffer.from(suppliedSecret);
   return expected.length === received.length && crypto.timingSafeEqual(expected, received);
 }
 
+function ensureNotificationIndexes() {
+  if (!notificationIndexSync) notificationIndexSync = DailyNotification.syncIndexes();
+  return notificationIndexSync;
+}
+
 exports.sendDailyReminder = async (req, res) => {
-  if (!isAuthorized(req)) {
-    return res.status(401).json({ success: false, message: "Unauthorized" });
+  if (!isAuthorized(req)) return res.status(401).json({ success: false, message: "Unauthorized" });
+
+  const slot = req.get("x-reminder-slot");
+  if (!SLOTS[slot]) {
+    return res.status(400).json({ success: false, message: "A valid X-Reminder-Slot header is required" });
   }
 
   const dateKey = getKolkataDateKey();
-
   try {
-    const existingNotification = await DailyNotification.findOne({ dateKey });
+    await ensureNotificationIndexes();
+    const existingNotification = await DailyNotification.findOne({ dateKey, slot });
     if (existingNotification) {
-      return res.json({ success: true, message: "Daily reminder already sent", dateKey });
+      return res.json({ success: true, message: "Reminder slot already sent", dateKey, slot });
     }
 
-    const orders = await Order.find({});
-    const reminders = orders.flatMap(orderToReminders);
     const todayReminders = [];
     const overdueReminders = [];
-
-    for (const reminder of reminders) {
-      if (reminder.completed) continue;
-
+    const completedToday = [];
+    const orders = await Order.find({});
+    for (const reminder of orders.flatMap(orderToReminders)) {
       const targetDateKey = getKolkataDateKey(getTargetDate(reminder));
-      if (targetDateKey === dateKey) todayReminders.push(reminder);
-      else if (targetDateKey < dateKey) overdueReminders.push(reminder);
-    }
-
-    if (!todayReminders.length && !overdueReminders.length) {
-      return res.json({ success: true, message: "No reminders due today", dateKey });
+      if (targetDateKey === dateKey) {
+        if (reminder.completed) completedToday.push(reminder);
+        else todayReminders.push(reminder);
+      } else if (targetDateKey < dateKey && !reminder.completed) {
+        overdueReminders.push(reminder);
+      }
     }
 
     try {
-      await DailyNotification.create({ dateKey });
+      await DailyNotification.create({ dateKey, slot });
     } catch (error) {
       if (error?.code === 11000) {
-        return res.json({ success: true, message: "Daily reminder already sent", dateKey });
+        return res.json({ success: true, message: "Reminder slot already sent", dateKey, slot });
       }
       throw error;
     }
 
     try {
-      await sendTelegramMessage(buildSummary(todayReminders, overdueReminders, dateKey));
-      await DailyNotification.updateOne({ dateKey }, { sentAt: new Date() });
+      await sendTelegramMessage(
+        buildSummary(slot, todayReminders, overdueReminders, completedToday, dateKey),
+        { parse_mode: "HTML", disable_web_page_preview: true },
+      );
+      await DailyNotification.updateOne({ dateKey, slot }, { sentAt: new Date() });
     } catch (error) {
-      await DailyNotification.deleteOne({ dateKey });
+      await DailyNotification.deleteOne({ dateKey, slot });
       throw error;
     }
 
     return res.json({
       success: true,
-      message: "Daily reminder sent",
+      message: `${SLOTS[slot]} reminder sent`,
       dateKey,
+      slot,
       today: todayReminders.length,
+      completed: completedToday.length,
       overdue: overdueReminders.length,
     });
   } catch (error) {
