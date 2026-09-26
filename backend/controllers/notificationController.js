@@ -5,6 +5,11 @@ const sendTelegramMessage = require("../utils/telegram");
 
 const TIME_ZONE = "Asia/Kolkata";
 const SLOTS = { "08:00": "8:00 AM", "15:30": "3:30 PM", "21:00": "9:00 PM" };
+const REMINDER_HEADINGS = {
+  review: "\u{1F4DD} REVIEW REMINDER",
+  refundForm: "\u{1F4C4} REFUND FORM REMINDER",
+  refund: "\u{1F4B0} REFUND REMINDER",
+};
 let notificationIndexSync;
 
 function getKolkataDateKey(date = new Date()) {
@@ -26,9 +31,29 @@ function daysBetween(dateKey, targetDateKey) {
   return Math.round((date - target) / 86_400_000);
 }
 
+function decodeHtmlEntities(value) {
+  const namedEntities = {
+    "&amp;": "&",
+    "&lt;": "<",
+    "&gt;": ">",
+    "&quot;": '"',
+    "&apos;": "'",
+    "&#39;": "'",
+  };
+
+  return String(value || "")
+    .replace(/&(amp|lt|gt|quot|apos);|&#39;/gi, (entity) => namedEntities[entity.toLowerCase()])
+    .replace(/&#(?:x([0-9a-f]+)|(\d+));/gi, (entity, hex, decimal) => {
+      const codePoint = Number.parseInt(hex || decimal, hex ? 16 : 10);
+      return Number.isSafeInteger(codePoint) && codePoint <= 0x10ffff
+        ? String.fromCodePoint(codePoint)
+        : entity;
+    });
+}
+
 function escapeHtml(value) {
   const entities = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
-  return String(value || "").replace(/[&<>"']/g, (character) => entities[character]);
+  return decodeHtmlEntities(value).replace(/[&<>"']/g, (character) => entities[character]);
 }
 
 function getTargetDate(reminder) {
@@ -56,66 +81,73 @@ function orderToReminders(order) {
   ].filter((reminder) => getTargetDate(reminder));
 }
 
-function formatReminder(reminder, dateKey, { overdue = false, includeContact = true } = {}) {
-  const lines = [`• ${escapeHtml(reminder.productName || "Product name unavailable")}`];
-  if (overdue) {
-    const days = daysBetween(dateKey, getKolkataDateKey(getTargetDate(reminder)));
-    lines.push(`⏰ ${days} day${days === 1 ? "" : "s"} overdue`);
-  }
-  if (includeContact && reminder.type !== "review" && reminder.contactPerson) {
-    lines.push(`👤 ${escapeHtml(reminder.contactPerson)}`);
+function reminderStatus(reminder, dateKey, completed = false) {
+  if (completed) return "\u{2705} Completed";
+
+  const days = daysBetween(dateKey, getKolkataDateKey(getTargetDate(reminder)));
+  if (days > 0) return `\u{26A0}\u{FE0F} ${days} day${days === 1 ? "" : "s"} overdue`;
+  if (days === 0) return "\u{23F0} Due today";
+  if (days === -1) return "\u{23F0} Due tomorrow";
+  return `\u{23F0} Due in ${Math.abs(days)} days`;
+}
+
+function formatReminder(reminder, dateKey, { completed = false } = {}) {
+  const lines = [
+    REMINDER_HEADINGS[reminder.type],
+    `\u{2022} ${escapeHtml(reminder.productName || "Product name unavailable")}`,
+    reminderStatus(reminder, dateKey, completed),
+  ];
+  if (reminder.type !== "review" && reminder.contactPerson) {
+    lines.push(`\u{1F464} Contact: ${escapeHtml(reminder.contactPerson)}`);
   }
   if (reminder.amazonLink) {
-    lines.push(`🔗 <a href="${escapeHtml(reminder.amazonLink)}">Open Product</a>`);
+    lines.push(`\u{1F517} <a href="${escapeHtml(reminder.amazonLink)}">Open Product</a>`);
   }
   return lines.join("\n");
 }
 
-function buildReminderSection(title, reminders, dateKey, options) {
-  if (!reminders.length) return "";
-  return `${title}\n${reminders.map((reminder) => formatReminder(reminder, dateKey, options)).join("\n\n")}`;
+function formatReminderList(reminders, dateKey, options) {
+  return reminders.map((reminder) => formatReminder(reminder, dateKey, options)).join("\n\n");
+}
+
+function buildTypeSummary(reminders) {
+  const count = (type) => reminders.filter((reminder) => reminder.type === type).length;
+  return [
+    "\u{1F4CA} Summary",
+    `\u{1F4DD} Review: ${count("review")}`,
+    `\u{1F4C4} Refund Form: ${count("refundForm")}`,
+    `\u{1F4B0} Refund: ${count("refund")}`,
+  ].join("\n");
 }
 
 function buildMorningSummary(todayReminders, overdueReminders, dateKey) {
-  const reviewToday = todayReminders.filter((reminder) => reminder.type === "review");
-  const refundToday = todayReminders.filter((reminder) => reminder.type !== "review");
-  const sections = ["🔔 Amazon Reminder | 8:00 AM", `📅 ${dateKey}`];
-  const reviewSection = buildReminderSection("📝 REVIEW TODAY", reviewToday, dateKey);
-  const refundSection = buildReminderSection("💰 REFUND TODAY", refundToday, dateKey);
-  const overdueSection = buildReminderSection("⚠️ OVERDUE", overdueReminders, dateKey, { overdue: true });
-  if (reviewSection) sections.push(reviewSection);
-  if (refundSection) sections.push(refundSection);
-  if (overdueSection) sections.push(overdueSection);
-  sections.push(`📌 TODAY: ${reviewToday.length} Reviews | ${refundToday.length} Refunds | ${overdueReminders.length} Overdue`);
+  const reminders = [...todayReminders, ...overdueReminders];
+  const sections = ["\u{1F514} Amazon Reminder | 8:00 AM", `\u{1F4C5} ${dateKey}`];
+  if (reminders.length) sections.push(formatReminderList(reminders, dateKey));
+  sections.push(buildTypeSummary(reminders));
   return sections.join("\n\n");
 }
 
 function buildAfternoonSummary(todayReminders, overdueReminders, completedToday, dateKey) {
-  const sections = ["🔔 Amazon Reminder | 3:30 PM", `📅 ${dateKey}`, "⏳ STILL PENDING"];
-  const reviewSection = buildReminderSection("📝 REVIEW", todayReminders.filter((reminder) => reminder.type === "review"), dateKey);
-  const refundSection = buildReminderSection("💰 REFUND", todayReminders.filter((reminder) => reminder.type !== "review"), dateKey);
-  const overdueSection = buildReminderSection("⚠️ OVERDUE", overdueReminders, dateKey, { overdue: true });
-  if (reviewSection) sections.push(reviewSection);
-  if (refundSection) sections.push(refundSection);
-  if (overdueSection) sections.push(overdueSection);
-  sections.push(`✅ Completed today: ${completedToday.length}\n⏳ Remaining: ${todayReminders.length + overdueReminders.length}`);
+  const reminders = [...todayReminders, ...overdueReminders];
+  const sections = ["\u{1F514} Amazon Reminder | 3:30 PM", `\u{1F4C5} ${dateKey}`];
+  if (reminders.length) sections.push(formatReminderList(reminders, dateKey));
+  sections.push(`\u{2705} Completed today: ${completedToday.length}\n\u{23F3} Remaining: ${reminders.length}`);
+  sections.push(buildTypeSummary(reminders));
   return sections.join("\n\n");
-}
-
-function productList(reminders) {
-  return reminders.map((reminder) => `• ${escapeHtml(reminder.productName || "Product name unavailable")}`).join("\n");
 }
 
 function buildFinalSummary(todayReminders, overdueReminders, completedToday, dateKey) {
   if (!todayReminders.length && !overdueReminders.length) {
-    return ["🔔 Amazon Reminder | 9:00 PM", `📅 ${dateKey}`, "🎉 All Done!\nNo pending reminders for today."].join("\n\n");
+    return ["\u{1F514} Amazon Reminder | 9:00 PM", `\u{1F4C5} ${dateKey}`, "\u{1F389} All Done!\nNo pending reminders for today."].join("\n\n");
   }
-  const sections = ["🔔 Amazon Reminder | 9:00 PM", `📅 ${dateKey}`, "📊 TODAY'S FINAL STATUS"];
-  if (completedToday.length) sections.push(`✅ COMPLETED\n${productList(completedToday)}`);
-  if (todayReminders.length) sections.push(`⏳ STILL PENDING\n${productList(todayReminders)}`);
-  const overdueSection = buildReminderSection("⚠️ OVERDUE", overdueReminders, dateKey, { overdue: true, includeContact: false });
-  if (overdueSection) sections.push(overdueSection);
-  sections.push(`📌 Summary\n✅ Completed: ${completedToday.length}\n⏳ Pending: ${todayReminders.length}\n⚠️ Overdue: ${overdueReminders.length}`);
+
+  const allReminders = [...completedToday, ...todayReminders, ...overdueReminders];
+  const sections = ["\u{1F514} Amazon Reminder | 9:00 PM", `\u{1F4C5} ${dateKey}`, "\u{1F4CA} TODAY'S FINAL STATUS"];
+  if (completedToday.length) sections.push(formatReminderList(completedToday, dateKey, { completed: true }));
+  if (todayReminders.length) sections.push(formatReminderList(todayReminders, dateKey));
+  if (overdueReminders.length) sections.push(formatReminderList(overdueReminders, dateKey));
+  sections.push(buildTypeSummary(allReminders));
   return sections.join("\n\n");
 }
 
