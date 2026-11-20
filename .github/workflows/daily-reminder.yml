@@ -1,21 +1,19 @@
+
 name: Daily Amazon Reminder
 
 on:
   schedule:
-    - cron: "30 2 * * *"
-    - cron: "0 10 * * *"
-    - cron: "30 15 * * *"
+    - cron: "0 10 * * *" # 3:30 PM IST (UTC)
+
   workflow_dispatch:
     inputs:
       slot:
         description: Reminder time slot to send
         required: true
-        default: "08:00"
+        default: "15:30"
         type: choice
         options:
-          - "08:00"
           - "15:30"
-          - "21:00"
 
 jobs:
   send-daily-reminder:
@@ -25,7 +23,7 @@ jobs:
         env:
           REMINDER_API_URL: ${{ secrets.REMINDER_API_URL }}
           REMINDER_CRON_SECRET: ${{ secrets.REMINDER_CRON_SECRET }}
-          REMINDER_SLOT: ${{ inputs.slot || (github.event.schedule == '30 2 * * *' && '08:00') || (github.event.schedule == '0 10 * * *' && '15:30') || '21:00' }}
+          REMINDER_SLOT: "15:30"
         run: |
           curl --fail --silent --show-error --request POST "${REMINDER_API_URL%/}/api/notifications/daily-reminder" \
             --header "Authorization: Bearer ${REMINDER_CRON_SECRET}" \
